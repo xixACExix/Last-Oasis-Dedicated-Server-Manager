@@ -2,53 +2,55 @@
 
 Windows desktop manager for running multiple Last Oasis dedicated server tiles for one realm.
 
-## What it does
+## Features
 
-- Manages multiple tile host profiles for one Last Oasis realm.
-- Starts, stops, and safely restarts tile server processes.
-- Checks and applies dedicated server updates through SteamCMD.
-- Checks and applies configured Workshop mod updates.
-- Posts restart, update, player-count, event tile, and chat messages to Discord webhooks.
-- Supports scheduled restarts, update restarts, and safe-stop workflows.
-- Integrates with MyRealm for tile/session visibility and event tile cycles.
-- Supports an optional LOManagerBridge server-side mod for in-game admin/restart messages.
-- Provides a small remote web panel for basic server control from the local network.
+- Start, stop, and safely restart Last Oasis tile servers.
+- Manage multiple tile host profiles for one realm.
+- Check and apply dedicated server updates through SteamCMD.
+- Check and apply configured Workshop mod updates.
+- Configure scheduled restarts and safe-stop workflows.
+- Send Discord notifications for restarts, updates, player counts, event tiles, and server chat.
+- View MyRealm tile/session information from the manager.
+- Create and manage timed event tile cycles.
+- Optional in-game admin/restart messages through a compatible LOManagerBridge server mod.
+- Optional local-network web panel for quick remote control.
 
-## Windows Only
+## Requirements
 
-This release is built for Windows dedicated servers. Linux support is not included yet.
-
-## Download
-
-Download the latest release:
-
-`LastOasisManager-Installer.exe`
+- Windows dedicated server machine.
+- Last Oasis Dedicated Server installed.
+- SteamCMD for updates and Workshop mods.
+- MyRealm customer/provider details for hosting.
+- Discord webhooks if you want Discord notifications.
 
 ## Install
 
-1. Download `LastOasisManager-Installer.exe`.
-2. Put it in the folder where you want the manager installed, for example:
-   `C:\LO Dedicated Manager`
+1. Download `LastOasisManager-Installer.exe` from the latest release.
+2. Put it in the folder where you want the manager installed, for example `C:\LO Dedicated Manager`.
 3. Run the installer.
 4. Open `Last Oasis Dedicated Server Tool.exe`.
-5. Configure your Last Oasis dedicated server path, SteamCMD path, MyRealm keys, Workshop mod IDs, and Discord webhooks.
+5. Configure your dedicated server path, SteamCMD path, MyRealm keys, Workshop mod IDs, and Discord webhooks.
 6. Start the backend from the manager.
-7. Create or review your tile host profiles.
+7. Create or review the tile host profiles for your realm.
 
-## Optional In-Game Message Bridge
+## In-Game Messages
 
-Discord and manager-side messages work without any mod.
+Discord and manager-side notifications work without a mod.
 
-In-game admin messages, restart warnings, and countdown popups require a compatible server-side Last Oasis mod that reads the manager bridge JSON files. If that mod is not installed on the server tiles, the manager will still run, but messages will not appear inside the game.
+To show admin messages, restart warnings, or countdown popups inside Last Oasis, install a compatible LOManagerBridge server-side mod on your tiles and set the bridge path in the manager.
 
 ## Remote Web Panel
 
-The backend can expose a local web panel on the configured API port. Open it from the same network using:
+The manager can expose a small local-network web panel on the configured API port.
+
+Example:
 
 `http://SERVER-IP:4020`
 
-Set a remote password in the manager before exposing this outside the local machine.
+Set a remote password in the manager before using the web panel from another device.
 
-## Safety Notes
+## Notes
 
-Keep MyRealm keys, provider keys, API keys, Discord webhooks, and bot tokens private.
+This release is Windows only for now.
+
+Keep MyRealm keys, provider keys, API keys, Discord webhooks, bot tokens, and Steam login details private.
