@@ -12,7 +12,7 @@ Windows desktop manager for running multiple Last Oasis dedicated server tiles f
 - Send Discord notifications for restarts, updates, player counts, event tiles, and server chat.
 - View MyRealm tile/session information from the manager.
 - Create and manage timed event tile cycles.
-- Optional in-game admin/restart messages through a compatible LOManagerBridge server mod.
+- Optional in-game admin/restart messages through the LOManagerBridge server mod.
 - Optional local-network web panel for quick remote control.
 
 ## Requirements
@@ -22,6 +22,7 @@ Windows desktop manager for running multiple Last Oasis dedicated server tiles f
 - SteamCMD for updates and Workshop mods.
 - MyRealm customer/provider details for hosting.
 - Discord webhooks if you want Discord notifications.
+- Optional: [LOManagerBridge](https://steamcommunity.com/sharedfiles/filedetails/?id=3727189852) if you want in-game admin messages, restart warnings, countdown popups, or Discord-to-game replies.
 
 ## Install
 
@@ -33,11 +34,23 @@ Windows desktop manager for running multiple Last Oasis dedicated server tiles f
 6. Start the backend from the manager.
 7. Create or review the tile host profiles for your realm.
 
-## In-Game Messages
+## LOManagerBridge
 
-Discord and manager-side notifications work without a mod.
+[LOManagerBridge](https://steamcommunity.com/sharedfiles/filedetails/?id=3727189852) is an optional server-side mod that lets the manager send messages into the game.
 
-To show admin messages, restart warnings, or countdown popups inside Last Oasis, install a compatible LOManagerBridge server-side mod on your tiles and set the bridge path in the manager.
+The manager itself can still run servers, update mods, update the dedicated server, manage event tiles, and post Discord notifications without the bridge mod. The bridge is only needed for messages that should appear inside Last Oasis.
+
+When installed on the server tiles, the mod watches a small inbox folder inside the Last Oasis server files. The manager writes tiny JSON command files into that folder. The mod reads the command, shows the message in-game, then clears the file so it will not repeat.
+
+The bridge supports:
+
+- Admin messages to all servers.
+- Admin messages to one live tile.
+- Restart warnings in game chat.
+- A 5-minute restart countdown popup.
+- Discord replies or slash-command messages sent back to a specific live tile.
+
+The manager links live tile names to server identifiers such as `realm_server_1`, `realm_server_2`, and so on. This lets Discord replies and targeted admin messages go to the correct tile instead of every server.
 
 ## Remote Web Panel
 
