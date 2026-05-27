@@ -1,0 +1,15 @@
+LastOasisManager-Installer.exe
+*.zip
+*.7z
+*.log
+LO_Profiles/
+data/
+tmp/
+node_modules/
+tools/
+*.config.json
+*.session-cache.json
+*cookie*
+*password*
+*token*
+*webhook*
