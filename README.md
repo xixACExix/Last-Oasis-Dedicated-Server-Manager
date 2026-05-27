@@ -20,11 +20,9 @@ This release is built for Windows dedicated servers. Linux support is not includ
 
 ## Download
 
-Use the latest GitHub Release and download:
+Download the latest release:
 
 `LastOasisManager-Installer.exe`
-
-The installer is large, so it should be uploaded as a GitHub Release asset instead of committed directly to the repository.
 
 ## Install
 
@@ -53,7 +51,4 @@ Set a remote password in the manager before exposing this outside the local mach
 
 ## Safety Notes
 
-- Keep MyRealm keys, provider keys, API keys, Discord webhooks, and bot tokens private.
-- Do not upload your `LO_Profiles` folder publicly.
-- Do not upload manager backups or browser debug profiles publicly.
-- Only share the installer and public documentation.
+Keep MyRealm keys, provider keys, API keys, Discord webhooks, and bot tokens private.
