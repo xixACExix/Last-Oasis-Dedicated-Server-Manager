@@ -1,7 +1,5 @@
 ﻿.gitignore
 docs\LOManager_GameBridge_API.md
-docs\LOManagerBridgeTileRouter.cs
-docs\LOModKit_Custom_Plugin_Requirements.md
 index.html
 install-tool_01.cmd
 lo-tool.cmd

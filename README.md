@@ -52,6 +52,8 @@ The bridge supports:
 
 The manager links live tile names to server identifiers such as `realm_server_1`, `realm_server_2`, and so on. This lets Discord replies and targeted admin messages go to the correct tile instead of every server.
 
+For the bridge file layout and message format, see `docs/LOManager_GameBridge_API.md`.
+
 ## Remote Web Panel
 
 The manager can expose a small local-network web panel on the configured API port.
