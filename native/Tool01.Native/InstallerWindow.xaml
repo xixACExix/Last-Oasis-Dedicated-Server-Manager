@@ -1,0 +1,162 @@
+<Window x:Class="Tool01.Native.InstallerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Last Oasis Installer"
+        Height="680"
+        Width="940"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Background="#1A100A"
+        Foreground="#F4E7D0"
+        Icon="/Assets/LastOasisManager.ico">
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Background="#2A180F"
+                BorderBrush="#D69D54"
+                BorderThickness="1"
+                CornerRadius="10"
+                Padding="0"
+                Margin="0,0,0,16">
+            <Grid ClipToBounds="True">
+                <Border>
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#3B2114" Offset="0" />
+                            <GradientStop Color="#1A0F09" Offset="0.48" />
+                            <GradientStop Color="#6B3218" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+                <Path Data="M 0 82 C 140 28 260 116 420 58 C 560 8 700 22 940 12 L 940 140 L 0 140 Z"
+                      Fill="#2B0D0604"
+                      Opacity="0.54"
+                      Stretch="Fill" />
+                <Path Data="M 620 0 L 770 0 L 875 116 L 735 114 Z"
+                      Fill="#48D38A36"
+                      Opacity="0.34"
+                      Stretch="Fill" />
+                <Path Data="M 90 22 L 280 56 L 102 82 Z"
+                      Fill="#58E8A34C"
+                      Opacity="0.30"
+                      Stretch="Fill" />
+                <Border Background="#97140B06" />
+                <StackPanel Margin="22">
+                <TextBlock Text="LAST OASIS INSTALLER"
+                           FontSize="28"
+                           FontWeight="Bold"
+                           FontFamily="Bahnschrift SemiBold"
+                           Foreground="#F7E9CE" />
+                <TextBlock Margin="0,10,0,0"
+                           TextWrapping="Wrap"
+                           FontSize="14"
+                           Foreground="#D1BEA2"
+                           Text="Pick the same 3 paths as the working launcher: SteamCMD folder, server folder, and the LO_Profiles settings folder. The installer handles SteamCMD first, then installs the dedicated server, then sets up the manager and desktop shortcuts." />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1"
+                Background="#21140D"
+                BorderBrush="#6E4622"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="16"
+                Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="210" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="120" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="SteamCMD folder" />
+                <TextBox x:Name="SteamCmdPathBox" Grid.Row="0" Grid.Column="1" Margin="0,0,12,10" Height="30" Background="#100A07" Foreground="#F5EAD6" BorderBrush="#6E4622" />
+                <Button Grid.Row="0" Grid.Column="2" Margin="0,0,0,10" Height="30" Content="Browse..." Click="BrowseSteamCmdFolderClick" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Server folder" />
+                <TextBox x:Name="ServerPathBox" Grid.Row="1" Grid.Column="1" Margin="0,0,12,10" Height="30" Background="#100A07" Foreground="#F5EAD6" BorderBrush="#6E4622" />
+                <Button Grid.Row="1" Grid.Column="2" Margin="0,0,0,10" Height="30" Content="Browse..." Click="BrowseServerFolderClick" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="LO_Profiles folder" />
+                <TextBox x:Name="ProfileRootBox" Grid.Row="2" Grid.Column="1" Margin="0,0,12,0" Height="30" Background="#100A07" Foreground="#F5EAD6" BorderBrush="#6E4622" />
+                <Button Grid.Row="2" Grid.Column="2" Height="30" Content="Browse..." Click="BrowseProfileFolderClick" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="2"
+                Background="#21140D"
+                BorderBrush="#6E4622"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="16"
+                Margin="0,0,0,12">
+            <TextBlock TextWrapping="Wrap"
+                       Foreground="#D1BEA2"
+                       Text="Default paths: C:\SteamCMD and C:\LastOasisServer. If you choose a different server drive, the installer will run SteamCMD with that exact force_install_dir path." />
+        </Border>
+
+        <Border Grid.Row="3"
+                Background="#21140D"
+                BorderBrush="#6E4622"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="16"
+                Margin="0,0,0,12">
+            <TextBlock x:Name="StatusText"
+                       FontSize="14"
+                       FontWeight="SemiBold"
+                       Foreground="#F1C589"
+                       Text="Ready to install." />
+        </Border>
+
+        <Border Grid.Row="4"
+                Background="#21140D"
+                BorderBrush="#6E4622"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="12"
+                Margin="0,0,0,12">
+            <TextBox x:Name="LogTextBox"
+                     AcceptsReturn="True"
+                     IsReadOnly="True"
+                     VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Auto"
+                     TextWrapping="Wrap"
+                     FontFamily="Consolas"
+                     FontSize="13"
+                     Background="#100A07"
+                     Foreground="#F5EAD6"
+                     BorderThickness="0" />
+        </Border>
+
+        <StackPanel Grid.Row="5"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right">
+            <Button x:Name="CancelButton"
+                    Width="110"
+                    Height="34"
+                    Margin="0,0,12,0"
+                    Content="Close"
+                    Click="CancelClick" />
+            <Button x:Name="InstallButton"
+                    Width="140"
+                    Height="34"
+                    Content="Install"
+                    Click="InstallClick" />
+        </StackPanel>
+    </Grid>
+</Window>
