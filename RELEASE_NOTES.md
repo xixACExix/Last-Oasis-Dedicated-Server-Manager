@@ -1,21 +1,24 @@
-# Last Oasis Dedicated Server Manager
+# Release Notes
 
-Windows release for managing multiple Last Oasis dedicated server tiles for one realm.
+## Last Oasis Dedicated Server Manager
 
-## Included
+Public Windows release package.
 
-- Desktop manager.
+This build includes:
+
+- Desktop manager for Last Oasis dedicated server tile hosts.
 - Backend control service started from the manager.
-- Optional local-network web panel.
+- Remote web panel.
 - SteamCMD dedicated server update checks.
-- SteamCMD Workshop mod update checks.
-- Scheduled restart and safe-stop tools.
+- SteamCMD Workshop mod update checks for configured mod IDs.
 - Discord webhook notifications.
 - Discord reply/slash-command bridge support.
 - Optional LOManagerBridge in-game message support.
 - MyRealm tile/session tools.
 - Event tile cycle tools.
 
-## Install
+## Notes
 
-Download `LastOasisManager-Installer.exe`, place it in the folder where you want the manager installed, run it, then open `Last Oasis Dedicated Server Tool.exe`.
+- The manager runs multiple server tiles for one Last Oasis realm.
+- The in-game message features require the optional LOManagerBridge server mod.
+- The release is Windows only for now.
