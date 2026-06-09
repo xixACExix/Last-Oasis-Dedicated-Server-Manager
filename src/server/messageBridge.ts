@@ -273,16 +273,30 @@ function resolveBridgeCommandTargetsFromConfig(config: AppConfig): BridgeCommand
           : path.join(configuredCommandPath, "Admin.json"),
       )
     : path.join(inboxRootPath, "Admin.json");
+  const configuredNoWidgetPath = config.operationsSettings.gameBridgeNoWidgetCommandFilePath?.trim();
+  const globalNoWidgetPath = configuredNoWidgetPath
+    ? normalizeBridgePath(
+        path.basename(configuredNoWidgetPath).toLowerCase().endsWith(".json")
+          ? configuredNoWidgetPath
+          : path.join(configuredNoWidgetPath, "AdminNOwidget.json"),
+      )
+    : path.join(inboxRootPath, "AdminNOwidget.json");
 
   return {
     enabled: config.operationsSettings.gameBridgeModMessagesEnabled !== false,
     inboxRootPath,
     commandPath: globalWidgetPath,
     globalWidgetPath,
-    globalNoWidgetPath: path.join(inboxRootPath, "AdminNOwidget.json"),
-    tileWidgetDirectory: path.join(inboxRootPath, "Tiles"),
-    tileNoWidgetDirectory: path.join(inboxRootPath, "TilesNW"),
-    tileDiscordDirectory: path.join(inboxRootPath, "TilesDC"),
+    globalNoWidgetPath,
+    tileWidgetDirectory: config.operationsSettings.gameBridgeTileWidgetDirectory?.trim()
+      ? normalizeBridgePath(config.operationsSettings.gameBridgeTileWidgetDirectory)
+      : path.join(inboxRootPath, "Tiles"),
+    tileNoWidgetDirectory: config.operationsSettings.gameBridgeTileNoWidgetDirectory?.trim()
+      ? normalizeBridgePath(config.operationsSettings.gameBridgeTileNoWidgetDirectory)
+      : path.join(inboxRootPath, "TilesNW"),
+    tileDiscordDirectory: config.operationsSettings.gameBridgeTileDiscordDirectory?.trim()
+      ? normalizeBridgePath(config.operationsSettings.gameBridgeTileDiscordDirectory)
+      : path.join(inboxRootPath, "TilesDC"),
   };
 }
 
@@ -415,7 +429,7 @@ async function buildStatus(store: MessageBridgeStore): Promise<InGameMessageBrid
   const inboxRootPath = bridgeCommandFile.inboxRootPath ? toWindowsPath(bridgeCommandFile.inboxRootPath) : null;
   const note = bridgeCommandFile.enabled
     ? bridgeCommandPath
-      ? `Local bridge queue is ready. Global widget commands use ${bridgeCommandPath}; tile messages use Tiles, TilesNW, and Discord replies use TilesDC under the inbox root.`
+      ? `Local bridge queue is ready. Global widget commands use ${bridgeCommandPath}; global no-widget, tile, and Discord reply messages use the configured LOManagerBridge paths.`
       : "Local bridge queue is ready, but the LOManagerBridge inbox root is not configured."
     : "Local bridge queue is ready. LOManagerBridge command-file messages are disabled in Operations.";
 

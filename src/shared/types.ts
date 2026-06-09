@@ -438,6 +438,10 @@ export type OperationsSettings = {
   gameBridgeModMessagesEnabled: boolean;
   gameBridgeInboxRootPath: string;
   gameBridgeCommandFilePath: string;
+  gameBridgeNoWidgetCommandFilePath: string;
+  gameBridgeTileWidgetDirectory: string;
+  gameBridgeTileNoWidgetDirectory: string;
+  gameBridgeTileDiscordDirectory: string;
   autoRestartOfflineRealms: boolean;
   offlineRestartGraceMinutes: number;
 };

@@ -286,6 +286,10 @@ public partial class MainWindow
         config.OperationsSettings.GameBridgeModMessagesEnabled = GameBridgeModMessagesCheckBox.IsChecked == true;
         config.OperationsSettings.GameBridgeInboxRootPath = GameBridgeInboxRootPathTextBox.Text.Trim();
         config.OperationsSettings.GameBridgeCommandFilePath = GameBridgeCommandFilePathTextBox.Text.Trim();
+        config.OperationsSettings.GameBridgeNoWidgetCommandFilePath = GameBridgeNoWidgetCommandFilePathTextBox.Text.Trim();
+        config.OperationsSettings.GameBridgeTileWidgetDirectory = GameBridgeTileWidgetDirectoryTextBox.Text.Trim();
+        config.OperationsSettings.GameBridgeTileNoWidgetDirectory = GameBridgeTileNoWidgetDirectoryTextBox.Text.Trim();
+        config.OperationsSettings.GameBridgeTileDiscordDirectory = GameBridgeTileDiscordDirectoryTextBox.Text.Trim();
         config.OperationsSettings.ModUpdateCheckMinutes = ParseRequiredInt(ModUpdateCheckMinutesTextBox.Text, "Update check minutes");
         config.OperationsSettings.GameUpdateCheckMinutes = ParseRequiredInt(GameUpdateCheckMinutesTextBox.Text, "Server update check minutes");
         config.OperationsSettings.ModUpdateGraceMinutes = 15;

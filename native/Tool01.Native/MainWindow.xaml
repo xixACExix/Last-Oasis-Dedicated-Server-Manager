@@ -1451,6 +1451,10 @@
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="160" />
@@ -1466,7 +1470,7 @@
                                              Grid.Column="1"
                                              x:Name="GameBridgeInboxRootPathTextBox"
                                              TextChanged="OperationsEditorChanged"
-                                             ToolTip="Root folder watched by LOManagerBridge. The manager derives Admin.json, AdminNOwidget.json, Tiles, and TilesNW below this folder." />
+                                             ToolTip="Root folder watched by LOManagerBridge. Defaults derive Admin.json, AdminNOwidget.json, Tiles, TilesNW, and TilesDC below this folder." />
                                     <Button Grid.Row="0"
                                             Grid.Column="2"
                                             Content="Choose Inbox Root"
@@ -1490,6 +1494,58 @@
                                             Margin="0,8,0,0"
                                             Click="BrowseGameBridgeCommandPathButton_Click"
                                             ToolTip="Choose or create the Admin.json file that the LOManagerBridge mod reads." />
+                                    <TextBlock Grid.Row="2"
+                                               Grid.Column="0"
+                                               Text="AdminNOwidget"
+                                               VerticalAlignment="Center"
+                                               Margin="0,8,0,0"
+                                               Style="{StaticResource SectionLabelStyle}" />
+                                    <TextBox Grid.Row="2"
+                                             Grid.Column="1"
+                                             Grid.ColumnSpan="2"
+                                             x:Name="GameBridgeNoWidgetCommandFilePathTextBox"
+                                             Margin="0,8,0,0"
+                                             TextChanged="OperationsEditorChanged"
+                                             ToolTip="Full path to AdminNOwidget.json for all-server messages that should not trigger the restart widget." />
+                                    <TextBlock Grid.Row="3"
+                                               Grid.Column="0"
+                                               Text="Tile widget folder"
+                                               VerticalAlignment="Center"
+                                               Margin="0,8,0,0"
+                                               Style="{StaticResource SectionLabelStyle}" />
+                                    <TextBox Grid.Row="3"
+                                             Grid.Column="1"
+                                             Grid.ColumnSpan="2"
+                                             x:Name="GameBridgeTileWidgetDirectoryTextBox"
+                                             Margin="0,8,0,0"
+                                             TextChanged="OperationsEditorChanged"
+                                             ToolTip="Folder for per-tile messages with widget support, normally Inbox\Tiles." />
+                                    <TextBlock Grid.Row="4"
+                                               Grid.Column="0"
+                                               Text="Tile no-widget folder"
+                                               VerticalAlignment="Center"
+                                               Margin="0,8,0,0"
+                                               Style="{StaticResource SectionLabelStyle}" />
+                                    <TextBox Grid.Row="4"
+                                             Grid.Column="1"
+                                             Grid.ColumnSpan="2"
+                                             x:Name="GameBridgeTileNoWidgetDirectoryTextBox"
+                                             Margin="0,8,0,0"
+                                             TextChanged="OperationsEditorChanged"
+                                             ToolTip="Folder for per-tile messages without widget support, normally Inbox\TilesNW." />
+                                    <TextBlock Grid.Row="5"
+                                               Grid.Column="0"
+                                               Text="Discord tile folder"
+                                               VerticalAlignment="Center"
+                                               Margin="0,8,0,0"
+                                               Style="{StaticResource SectionLabelStyle}" />
+                                    <TextBox Grid.Row="5"
+                                             Grid.Column="1"
+                                             Grid.ColumnSpan="2"
+                                             x:Name="GameBridgeTileDiscordDirectoryTextBox"
+                                             Margin="0,8,0,0"
+                                             TextChanged="OperationsEditorChanged"
+                                             ToolTip="Folder used for Discord-to-game tile messages, normally Inbox\TilesDC." />
                                 </Grid>
                             </GroupBox>
 

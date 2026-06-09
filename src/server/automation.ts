@@ -49,7 +49,6 @@ const missingProfileSince = new Map<string, number>();
 const lastRestartAttemptAt = new Map<string, number>();
 const SCHEDULER_TICK_MS = 5_000;
 const MYREALM_SESSION_CACHE_TTL_MS = 60_000;
-const MYREALM_AUTOCONNECT_COOLDOWN_MS = 120_000;
 const DESIRED_PROFILE_RESTART_COOLDOWN_MS = 10_000;
 const DESIRED_PROFILE_STARTUP_GRACE_MS = 20_000;
 const DEFAULT_RESTART_FIXED_TIMES = ["00:00", "12:00"] as const;
@@ -61,7 +60,6 @@ const MAINTENANCE_ANNOUNCEMENT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 const DISCORD_WEBHOOK_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
 const PLAYER_COUNTER_WEBHOOK_MIN_INTERVAL_MS = 10 * 60 * 1000;
 const MAINTENANCE_DEDUPE_BUCKET_MS = 5 * 60 * 1000;
-let lastMyRealmAutoConnectAttemptAt = 0;
 const managerProfileDataPath = getProfileDataPath();
 const maintenanceAnnouncementStatePath = path.join(managerProfileDataPath, "discord", "maintenance-announcement-state.json");
 const discordWebhookDedupeDirectory = path.join(managerProfileDataPath, "discord", "webhook-dedupe");
@@ -815,11 +813,7 @@ async function loadCachedMyRealmSession(config: AppConfig) {
   }
 
   try {
-    const allowLaunch = Date.now() - lastMyRealmAutoConnectAttemptAt >= MYREALM_AUTOCONNECT_COOLDOWN_MS;
-    if (allowLaunch) {
-      lastMyRealmAutoConnectAttemptAt = Date.now();
-    }
-    const session = await loadMyRealmSessionSnapshot(resolvedConfig.myRealmFlow, { allowLaunch });
+    const session = await loadMyRealmSessionSnapshot(resolvedConfig.myRealmFlow, { allowLaunch: false });
     myRealmSessionCache = {
       key,
       fetchedAt: Date.now(),

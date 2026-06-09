@@ -93,6 +93,10 @@ const operationsSettingsSchema = z.object({
   gameBridgeModMessagesEnabled: z.boolean().catch(true),
   gameBridgeInboxRootPath: z.string().catch(""),
   gameBridgeCommandFilePath: z.string().catch(""),
+  gameBridgeNoWidgetCommandFilePath: z.string().catch(""),
+  gameBridgeTileWidgetDirectory: z.string().catch(""),
+  gameBridgeTileNoWidgetDirectory: z.string().catch(""),
+  gameBridgeTileDiscordDirectory: z.string().catch(""),
   autoRestartOfflineRealms: z.boolean(),
   offlineRestartGraceMinutes: z.number().int(),
 });
@@ -801,6 +805,23 @@ function normalizeConfig(input: unknown, discoveredPaths: DiscoveredPaths): AppC
       maybeConfig.operationsSettings?.gameBridgeCommandFilePath || path.join(gameBridgeInboxRootPath, "Admin.json"),
       discoveredPaths,
     ),
+    gameBridgeNoWidgetCommandFilePath: normalizeGameBridgeJsonFilePath(
+      maybeConfig.operationsSettings?.gameBridgeNoWidgetCommandFilePath,
+      "AdminNOwidget.json",
+      path.join(gameBridgeInboxRootPath, "AdminNOwidget.json"),
+    ),
+    gameBridgeTileWidgetDirectory: normalizeGameBridgeDirectoryPath(
+      maybeConfig.operationsSettings?.gameBridgeTileWidgetDirectory,
+      path.join(gameBridgeInboxRootPath, "Tiles"),
+    ),
+    gameBridgeTileNoWidgetDirectory: normalizeGameBridgeDirectoryPath(
+      maybeConfig.operationsSettings?.gameBridgeTileNoWidgetDirectory,
+      path.join(gameBridgeInboxRootPath, "TilesNW"),
+    ),
+    gameBridgeTileDiscordDirectory: normalizeGameBridgeDirectoryPath(
+      maybeConfig.operationsSettings?.gameBridgeTileDiscordDirectory,
+      path.join(gameBridgeInboxRootPath, "TilesDC"),
+    ),
     autoRestartOfflineRealms: maybeConfig.operationsSettings?.autoRestartOfflineRealms ?? true,
     offlineRestartGraceMinutes: maybeConfig.operationsSettings?.offlineRestartGraceMinutes ?? 1,
   };
@@ -980,6 +1001,22 @@ function getDefaultGameBridgeCommandFilePath(discoveredPaths: DiscoveredPaths) {
   return toWindowsPath(path.join(getDefaultGameBridgeInboxRootPath(discoveredPaths), "Admin.json"));
 }
 
+function getDefaultGameBridgeNoWidgetCommandFilePath(discoveredPaths: DiscoveredPaths) {
+  return toWindowsPath(path.join(getDefaultGameBridgeInboxRootPath(discoveredPaths), "AdminNOwidget.json"));
+}
+
+function getDefaultGameBridgeTileWidgetDirectory(discoveredPaths: DiscoveredPaths) {
+  return toWindowsPath(path.join(getDefaultGameBridgeInboxRootPath(discoveredPaths), "Tiles"));
+}
+
+function getDefaultGameBridgeTileNoWidgetDirectory(discoveredPaths: DiscoveredPaths) {
+  return toWindowsPath(path.join(getDefaultGameBridgeInboxRootPath(discoveredPaths), "TilesNW"));
+}
+
+function getDefaultGameBridgeTileDiscordDirectory(discoveredPaths: DiscoveredPaths) {
+  return toWindowsPath(path.join(getDefaultGameBridgeInboxRootPath(discoveredPaths), "TilesDC"));
+}
+
 function getDefaultGameBridgeInboxRootPath(discoveredPaths: DiscoveredPaths) {
   return toWindowsPath(DEFAULT_GAME_BRIDGE_INBOX_ROOT_PATH);
 }
@@ -1018,6 +1055,33 @@ function normalizeGameBridgeCommandFilePath(value: string | null | undefined, di
     ? rawValue
     : path.join(rawValue, "Admin.json");
   return toWindowsPath(path.resolve(filePath));
+}
+
+function normalizeGameBridgeJsonFilePath(
+  value: string | null | undefined,
+  defaultFileName: string,
+  fallbackPath: string,
+) {
+  const configuredValue = value?.trim() ?? "";
+  const rawValue = configuredValue || fallbackPath;
+  if (!rawValue) {
+    return "";
+  }
+
+  const filePath = path.basename(rawValue).toLowerCase().endsWith(".json")
+    ? rawValue
+    : path.join(rawValue, defaultFileName);
+  return toWindowsPath(path.resolve(filePath));
+}
+
+function normalizeGameBridgeDirectoryPath(value: string | null | undefined, fallbackPath: string) {
+  const configuredValue = value?.trim() ?? "";
+  const rawValue = configuredValue || fallbackPath;
+  if (!rawValue) {
+    return "";
+  }
+
+  return toWindowsPath(path.resolve(rawValue));
 }
 
 async function readPersistedServerPathCandidate() {
@@ -1177,6 +1241,10 @@ export function buildDefaultConfig(paths: DiscoveredPaths): AppConfig {
       gameBridgeModMessagesEnabled: true,
       gameBridgeInboxRootPath: getDefaultGameBridgeInboxRootPath(paths),
       gameBridgeCommandFilePath: getDefaultGameBridgeCommandFilePath(paths),
+      gameBridgeNoWidgetCommandFilePath: getDefaultGameBridgeNoWidgetCommandFilePath(paths),
+      gameBridgeTileWidgetDirectory: getDefaultGameBridgeTileWidgetDirectory(paths),
+      gameBridgeTileNoWidgetDirectory: getDefaultGameBridgeTileNoWidgetDirectory(paths),
+      gameBridgeTileDiscordDirectory: getDefaultGameBridgeTileDiscordDirectory(paths),
       autoRestartOfflineRealms: true,
       offlineRestartGraceMinutes: 1,
     },

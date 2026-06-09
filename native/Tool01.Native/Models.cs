@@ -246,6 +246,10 @@ public sealed class OperationsSettings
     public bool GameBridgeModMessagesEnabled { get; set; } = true;
     public string GameBridgeInboxRootPath { get; set; } = "";
     public string GameBridgeCommandFilePath { get; set; } = "";
+    public string GameBridgeNoWidgetCommandFilePath { get; set; } = "";
+    public string GameBridgeTileWidgetDirectory { get; set; } = "";
+    public string GameBridgeTileNoWidgetDirectory { get; set; } = "";
+    public string GameBridgeTileDiscordDirectory { get; set; } = "";
     public bool AutoRestartOfflineRealms { get; set; }
     public int OfflineRestartGraceMinutes { get; set; }
 }

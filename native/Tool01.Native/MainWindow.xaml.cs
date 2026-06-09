@@ -809,6 +809,10 @@ public partial class MainWindow : Window
         GameBridgeModMessagesCheckBox.IsChecked = operations.GameBridgeModMessagesEnabled;
         GameBridgeInboxRootPathTextBox.Text = operations.GameBridgeInboxRootPath;
         GameBridgeCommandFilePathTextBox.Text = operations.GameBridgeCommandFilePath;
+        GameBridgeNoWidgetCommandFilePathTextBox.Text = operations.GameBridgeNoWidgetCommandFilePath;
+        GameBridgeTileWidgetDirectoryTextBox.Text = operations.GameBridgeTileWidgetDirectory;
+        GameBridgeTileNoWidgetDirectoryTextBox.Text = operations.GameBridgeTileNoWidgetDirectory;
+        GameBridgeTileDiscordDirectoryTextBox.Text = operations.GameBridgeTileDiscordDirectory;
         ModUpdateCheckMinutesTextBox.Text = operations.ModUpdateCheckMinutes.ToString();
         GameUpdateCheckMinutesTextBox.Text = (operations.GameUpdateCheckMinutes > 0 ? operations.GameUpdateCheckMinutes : operations.ModUpdateCheckMinutes).ToString();
         ModUpdateGraceMinutesTextBox.Text = Math.Max(15, operations.ModUpdateGraceMinutes).ToString();

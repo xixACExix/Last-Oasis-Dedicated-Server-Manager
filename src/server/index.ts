@@ -54,9 +54,7 @@ let startAllLaunchInFlight: Promise<void> | null = null;
 const DASHBOARD_CACHE_TTL_MS = 3_000;
 const MONITOR_CACHE_TTL_MS = 2_500;
 const MYREALM_BACKGROUND_REFRESH_MS = 60_000;
-const MYREALM_AUTOCONNECT_COOLDOWN_MS = 120_000;
 let lastMyRealmRefreshAt = 0;
-let lastMyRealmAutoConnectAttemptAt = 0;
 let dashboardStateCache:
   | {
       expiresAt: number;
@@ -242,7 +240,7 @@ function extractWorkshopModId(input: string) {
 
 async function buildResponseState(config: Awaited<ReturnType<typeof loadConfig>>) {
   if (!myRealmSessionCache) {
-    await ensureMyRealmSessionCacheAvailable(config, { force: true, allowLaunch: true });
+    await ensureMyRealmSessionCacheAvailable(config, { force: true, allowLaunch: false });
   } else if (Date.now() - lastMyRealmRefreshAt >= MYREALM_BACKGROUND_REFRESH_MS) {
     void ensureMyRealmSessionCacheAvailable(config).catch(() => undefined);
   }
@@ -674,13 +672,7 @@ async function ensureMyRealmSessionCacheAvailable(
 
   try {
     const resolved = await resolveCurrentMyRealmFlow(config, { requireIds: false });
-    const allowLaunch =
-      options?.allowLaunch ??
-      (now - lastMyRealmAutoConnectAttemptAt >= MYREALM_AUTOCONNECT_COOLDOWN_MS);
-
-    if (allowLaunch) {
-      lastMyRealmAutoConnectAttemptAt = now;
-    }
+    const allowLaunch = options?.allowLaunch ?? false;
 
     return await refreshMyRealmSessionCacheNow(resolved.myRealmFlow, { allowLaunch });
   } catch {
@@ -1017,6 +1009,27 @@ app.post("/api/steam-login/client-login", async (request, response) => {
 });
 
 app.use("/api", requireRemoteAccess);
+
+app.get("/api/remote/steam-client/status", async (_request, response) => {
+  try {
+    response.json(await getSteamClientStatus());
+  } catch (error) {
+    response.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to load Steam client status.",
+    });
+  }
+});
+
+app.post("/api/remote/steam-client/login", async (_request, response) => {
+  try {
+    const result = await loginSteamClient("remote-manual");
+    response.json(result);
+  } catch (error) {
+    response.status(400).json({
+      error: error instanceof Error ? error.message : "Failed to start Steam client login.",
+    });
+  }
+});
 
 app.get("/api/monitor", async (_request, response) => {
   try {
@@ -1830,7 +1843,7 @@ app.post("/api/myrealm/discover", async (_request, response) => {
 app.get("/api/myrealm/session", (_request, response) => {
   void (async () => {
     const config = await loadConfig();
-    await ensureMyRealmSessionCacheAvailable(config, { force: !myRealmSessionCache, allowLaunch: true });
+    await ensureMyRealmSessionCacheAvailable(config, { force: !myRealmSessionCache, allowLaunch: false });
 
     response.json({ session: myRealmSessionCache });
   })().catch((error) => {

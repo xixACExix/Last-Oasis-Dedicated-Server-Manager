@@ -19,6 +19,7 @@ const MYREALM_ORIGIN = "https://myrealm.lastoasis.gg";
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../");
 const MYREALM_SESSION_CACHE_PATH = path.join(ROOT_DIR, "data", "myrealm.session-cache.json");
 const LEGACY_EDGE_DEBUG_PROFILE_ROOT = path.join(ROOT_DIR, "data", "edge-debug-profile");
+const EDGE_LAUNCH_COOLDOWN_MS = 5 * 60_000;
 const EDGE_EXECUTABLE_CANDIDATES = [
   process.env.MSEDGE_PATH,
   process.env["ProgramFiles(x86)"] ? path.join(process.env["ProgramFiles(x86)"] ?? "", "Microsoft", "Edge", "Application", "msedge.exe") : "",
@@ -26,6 +27,9 @@ const EDGE_EXECUTABLE_CANDIDATES = [
   "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
   "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
 ].filter((entry): entry is string => Boolean(entry));
+
+let debugTargetLaunchInFlight: Promise<DevToolsTarget> | null = null;
+let lastDebugTargetLaunchAt = 0;
 
 type DevToolsTarget = {
   id: string;
@@ -126,6 +130,24 @@ async function ensureEdgeDebugProfileRoot() {
   return profileRoot;
 }
 
+async function readPersistedEdgeLaunchAt() {
+  const markerPath = path.join(getProfileDataPath(), "MyRealm Edge Profile", ".last-launch.json");
+  try {
+    const raw = await fs.readFile(markerPath, "utf8");
+    const parsed = JSON.parse(raw) as { launchedAt?: string };
+    const launchedAt = Date.parse(parsed.launchedAt ?? "");
+    return Number.isFinite(launchedAt) ? launchedAt : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function writePersistedEdgeLaunchAt() {
+  const markerPath = path.join(getProfileDataPath(), "MyRealm Edge Profile", ".last-launch.json");
+  await fs.mkdir(path.dirname(markerPath), { recursive: true });
+  await fs.writeFile(markerPath, JSON.stringify({ launchedAt: new Date().toISOString() }, null, 2), "utf8");
+}
+
 function absolutizeUrl(rawUrl: string | null) {
   if (!rawUrl) {
     return null;
@@ -142,6 +164,20 @@ function isMyRealmUrl(rawUrl: string) {
   try {
     const url = new URL(rawUrl);
     return url.hostname === "myrealm.lastoasis.gg";
+  } catch {
+    return false;
+  }
+}
+
+function isSteamLoginUrl(rawUrl: string) {
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.toLowerCase();
+    const pathname = url.pathname.toLowerCase();
+    return (
+      (host === "steamcommunity.com" && (pathname.startsWith("/openid/login") || pathname.includes("login"))) ||
+      (host === "store.steampowered.com" && pathname.includes("login"))
+    );
   } catch {
     return false;
   }
@@ -322,21 +358,22 @@ function selectTarget(targets: DevToolsTarget[], preferredUrl: string | null) {
     return exactMatch;
   }
 
-  return targets.find((target) => target.type === "page" && target.webSocketDebuggerUrl && isMyRealmUrl(target.url)) ?? null;
+  return (
+    targets.find((target) => target.type === "page" && target.webSocketDebuggerUrl && isMyRealmUrl(target.url)) ??
+    targets.find((target) => target.type === "page" && target.webSocketDebuggerUrl && isSteamLoginUrl(target.url)) ??
+    targets.find((target) => target.type === "page" && target.webSocketDebuggerUrl) ??
+    null
+  );
 }
 
-async function ensureDebugTarget(flow: MyRealmFlowSummary, options?: { allowLaunch?: boolean }) {
-  const preferredUrl = absolutizeUrl(flow.mapUrl ?? flow.realmUrl ?? flow.dashboardUrl ?? flow.apiUrl ?? `${MYREALM_ORIGIN}/`);
-  const currentTargets = await fetchDevToolsTargets();
-  const currentTarget = currentTargets ? selectTarget(currentTargets, preferredUrl) : null;
-
-  if (currentTarget) {
-    return currentTarget;
+async function launchEdgeDebugTarget(preferredUrl: string | null) {
+  const now = Date.now();
+  const persistedLaunchAt = await readPersistedEdgeLaunchAt();
+  if (now - Math.max(lastDebugTargetLaunchAt, persistedLaunchAt) < EDGE_LAUNCH_COOLDOWN_MS) {
+    throw new Error("A managed MyRealm browser window was opened recently. Reuse that window to finish Steam/MyRealm sign-in.");
   }
-
-  if (!options?.allowLaunch) {
-    throw new Error("No signed-in MyRealm Edge page is currently open for the control center to reuse.");
-  }
+  lastDebugTargetLaunchAt = now;
+  await writePersistedEdgeLaunchAt().catch(() => undefined);
 
   const edgeExecutable = await findEdgeExecutable();
   const edgeDebugProfileRoot = await ensureEdgeDebugProfileRoot();
@@ -368,7 +405,29 @@ async function ensureDebugTarget(flow: MyRealmFlowSummary, options?: { allowLaun
     await delay(500);
   }
 
-  throw new Error("Edge did not expose a debuggable MyRealm page in time. Sign into MyRealm in Edge and try again.");
+  throw new Error("Edge did not expose a debuggable MyRealm or Steam login page in time. Sign into MyRealm in Edge and try again.");
+}
+
+async function ensureDebugTarget(flow: MyRealmFlowSummary, options?: { allowLaunch?: boolean }) {
+  const preferredUrl = absolutizeUrl(flow.mapUrl ?? flow.realmUrl ?? flow.dashboardUrl ?? flow.apiUrl ?? `${MYREALM_ORIGIN}/`);
+  const currentTargets = await fetchDevToolsTargets();
+  const currentTarget = currentTargets ? selectTarget(currentTargets, preferredUrl) : null;
+
+  if (currentTarget) {
+    return currentTarget;
+  }
+
+  if (!options?.allowLaunch) {
+    throw new Error("No signed-in MyRealm Edge page is currently open for the control center to reuse.");
+  }
+
+  if (!debugTargetLaunchInFlight) {
+    debugTargetLaunchInFlight = launchEdgeDebugTarget(preferredUrl).finally(() => {
+      debugTargetLaunchInFlight = null;
+    });
+  }
+
+  return debugTargetLaunchInFlight;
 }
 
 class CdpClient {
@@ -600,7 +659,10 @@ async function autoLoginMyRealm(client: CdpClient, target: DevToolsTarget, flow:
     if (currentUrl.includes("steamcommunity.com") || currentUrl.includes("store.steampowered.com")) {
       const result = await fillSteamLoginForm(client, credentials.accountName, credentials.password);
       if (!result.submitted) {
-        throw new Error(result.reason || "Steam login form could not be submitted.");
+        const clicked = await tryClickMyRealmSteamSignIn(client).catch(() => false);
+        if (!clicked) {
+          throw new Error(result.reason || "Steam login form could not be submitted.");
+        }
       }
       const loggedInCookies = await waitForMyRealmCookie(client, target, flow, 20000);
       if (hasAuthenticatedMyRealmCookie(loggedInCookies)) {

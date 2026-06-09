@@ -11,12 +11,22 @@ type RemoteAccessInfo = {
   passwordEnvName: string;
 };
 
-type RemoteTab = "overview" | "updates" | "messages" | "remote";
+type RemoteTab = "overview" | "updates" | "messages" | "events" | "remote";
 type BridgeTargetOption = {
   label: string;
   scope: "global" | "tile";
   identifier?: string;
   tileName?: string;
+};
+
+type SteamClientStatus = {
+  ok: boolean;
+  steamExePath: string;
+  running: boolean;
+  canLogin: boolean;
+  accountName: string;
+  checkedAt: string;
+  note: string;
 };
 
 type ApiError = Error & {
@@ -29,6 +39,7 @@ const remoteTabs: Array<{ id: RemoteTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "updates", label: "Updates / Mods" },
   { id: "messages", label: "Messages" },
+  { id: "events", label: "Event Recovery" },
   { id: "remote", label: "Remote Access" },
 ];
 
@@ -154,6 +165,10 @@ function summarizeHostNames(names: string[]) {
   return `${names.slice(0, 3).join(", ")} +${names.length - 3} more`;
 }
 
+function summarizeNames(names: string[] | null | undefined) {
+  return names?.length ? names.join(", ") : "None";
+}
+
 function buildBridgeTargetOptions(servers: LiveServerSummary[]): BridgeTargetOption[] {
   const options: BridgeTargetOption[] = [{ label: "All servers", scope: "global" }];
   for (const server of servers) {
@@ -189,6 +204,8 @@ export default function App() {
   const [adminMessage, setAdminMessage] = useState("");
   const [adminTargetKey, setAdminTargetKey] = useState("global");
   const [adminWithWidget, setAdminWithWidget] = useState(true);
+  const [eventCycleId, setEventCycleId] = useState("");
+  const [steamStatus, setSteamStatus] = useState<SteamClientStatus | null>(null);
   const [safeStopReason, setSafeStopReason] = useState("Admin maintenance");
   const [busyAction, setBusyAction] = useState("");
   const [loginRequired, setLoginRequired] = useState(false);
@@ -246,6 +263,15 @@ export default function App() {
     }
   }, []);
 
+  const refreshSteamStatus = useCallback(async () => {
+    try {
+      const result = await apiFetch<SteamClientStatus>("/api/remote/steam-client/status");
+      setSteamStatus(result);
+    } catch {
+      setSteamStatus(null);
+    }
+  }, []);
+
   useEffect(() => {
     void loadRemoteAccess();
     void refreshDashboard();
@@ -269,6 +295,14 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, [activeTab, loginRequired, refreshChat]);
 
+  useEffect(() => {
+    if (activeTab !== "remote" || loginRequired) {
+      return;
+    }
+
+    void refreshSteamStatus();
+  }, [activeTab, loginRequired, refreshSteamStatus]);
+
   const profiles = dashboard?.config.profiles ?? [];
   const selectedProfile =
     profiles.find((profile) => profile.id === dashboard?.config.selectedProfileId) ?? profiles[0] ?? null;
@@ -284,6 +318,19 @@ export default function App() {
   const launchStatus = dashboard?.launchStatus ?? null;
   const hostNames = profiles.map((profile) => profile.name);
   const bridgeTargets = useMemo(() => buildBridgeTargetOptions(dashboard?.liveServers ?? []), [dashboard?.liveServers]);
+  const eventCycles = useMemo(() => {
+    const cycles = dashboard?.config.eventTileCycles?.length
+      ? dashboard.config.eventTileCycles
+      : dashboard?.config.eventTileCycle
+        ? [dashboard.config.eventTileCycle]
+        : [];
+    return cycles;
+  }, [dashboard?.config.eventTileCycle, dashboard?.config.eventTileCycles]);
+  const selectedEventCycle =
+    eventCycles.find((cycle) => cycle.id === eventCycleId) ??
+    eventCycles.find((cycle) => cycle.id === dashboard?.config.selectedEventTileCycleId) ??
+    eventCycles[0] ??
+    null;
   const selectedBridgeTarget =
     bridgeTargets.find((target) => (target.scope === "global" ? "global" : target.identifier) === adminTargetKey) ??
     bridgeTargets[0];
@@ -293,6 +340,17 @@ export default function App() {
       setAdminTargetKey("global");
     }
   }, [adminTargetKey, bridgeTargets]);
+
+  useEffect(() => {
+    if (!eventCycles.length) {
+      setEventCycleId("");
+      return;
+    }
+
+    if (!eventCycles.some((cycle) => cycle.id === eventCycleId)) {
+      setEventCycleId(dashboard?.config.selectedEventTileCycleId ?? eventCycles[0].id);
+    }
+  }, [dashboard?.config.selectedEventTileCycleId, eventCycleId, eventCycles]);
 
   const statusCards = useMemo(
     () => [
@@ -414,6 +472,66 @@ export default function App() {
       await apiFetch<{ result: unknown }>("/api/mods/update", {
         method: "POST",
       });
+    });
+  }
+
+  async function startSteamLogin() {
+    await runAction("steam-login", "Steam client login command was sent.", async () => {
+      await apiFetch<{ ok: boolean }>("/api/remote/steam-client/login", {
+        method: "POST",
+      });
+      await refreshSteamStatus();
+    });
+  }
+
+  async function openMyRealmLogin() {
+    await runAction("myrealm-login", "Managed MyRealm browser was opened or reused.", async () => {
+      const result = await apiFetch<{ dashboard?: DashboardState }>("/api/myrealm/session/refresh", {
+        method: "POST",
+      });
+      if (result.dashboard) {
+        setDashboard(result.dashboard);
+      }
+    });
+  }
+
+  async function openMyRealmDashboard() {
+    await runAction("myrealm-open", "Managed MyRealm browser was opened.", async () => {
+      await apiFetch<{ ok: boolean }>("/api/myrealm/managed-browser/open", {
+        method: "POST",
+        body: JSON.stringify({ url: dashboard?.config.myRealmFlow?.dashboardUrl ?? "https://myrealm.lastoasis.gg/" }),
+      });
+    });
+  }
+
+  async function runEventRecoveryAction(
+    action: string,
+    endpoint: "dry-run" | "start" | "advance" | "pause" | "cleanup",
+    successMessage: string,
+  ) {
+    if (!selectedEventCycle) {
+      setError("No event cycle is configured.");
+      return;
+    }
+
+    if (endpoint === "cleanup" && !window.confirm(`Force cleanup for ${selectedEventCycle.name}?`)) {
+      return;
+    }
+
+    await runAction(action, successMessage, async () => {
+      const result = await apiFetch<{ dashboard?: DashboardState; result?: { message?: string } }>(
+        `/api/myrealm/event-tiles/${endpoint}`,
+        {
+          method: "POST",
+          body: JSON.stringify({ cycleId: selectedEventCycle.id }),
+        },
+      );
+      if (result.dashboard) {
+        setDashboard(result.dashboard);
+      }
+      if (result.result?.message) {
+        setNotice(result.result.message);
+      }
     });
   }
 
@@ -772,6 +890,112 @@ export default function App() {
                 </section>
               )}
 
+              {activeTab === "events" && (
+                <section className="manager-panel">
+                  <div className="manager-columns">
+                    <section className="manager-box">
+                      <p className="manager-eyebrow">Event Tiles</p>
+                      <h2>Recovery controls</h2>
+                      <p className="muted">
+                        Use these only when an event cycle is stuck or needs a manual kick. Full cycle settings stay in the desktop manager.
+                      </p>
+                      <label className="field-label" htmlFor="event-cycle-select">
+                        Cycle
+                      </label>
+                      <select
+                        id="event-cycle-select"
+                        value={selectedEventCycle?.id ?? ""}
+                        onChange={(event) => setEventCycleId(event.target.value)}
+                        disabled={!eventCycles.length}
+                      >
+                        {eventCycles.length ? (
+                          eventCycles.map((cycle) => (
+                            <option key={cycle.id} value={cycle.id}>
+                              {cycle.name}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="">No event cycles configured</option>
+                        )}
+                      </select>
+                      <div className="button-grid">
+                        <button
+                          type="button"
+                          className="manager-button"
+                          onClick={() => void runEventRecoveryAction("event-dry-run", "dry-run", "Event dry run finished.")}
+                          disabled={Boolean(busyAction) || !selectedEventCycle}
+                        >
+                          Dry Run
+                        </button>
+                        <button
+                          type="button"
+                          className="manager-button manager-button-primary"
+                          onClick={() => void runEventRecoveryAction("event-start", "start", "Event start request was sent.")}
+                          disabled={Boolean(busyAction) || !selectedEventCycle}
+                        >
+                          Start Next Batch
+                        </button>
+                        <button
+                          type="button"
+                          className="manager-button"
+                          onClick={() => void runEventRecoveryAction("event-advance", "advance", "Event advance request was sent.")}
+                          disabled={Boolean(busyAction) || !selectedEventCycle}
+                        >
+                          Advance Cycle
+                        </button>
+                        <button
+                          type="button"
+                          className="manager-button"
+                          onClick={() => void runEventRecoveryAction("event-pause", "pause", "Event pause request was sent.")}
+                          disabled={Boolean(busyAction) || !selectedEventCycle}
+                        >
+                          Pause Cycle
+                        </button>
+                        <button
+                          type="button"
+                          className="manager-button manager-button-danger"
+                          onClick={() => void runEventRecoveryAction("event-cleanup", "cleanup", "Event cleanup request was sent.")}
+                          disabled={Boolean(busyAction) || !selectedEventCycle}
+                        >
+                          Force Cleanup
+                        </button>
+                      </div>
+                    </section>
+
+                    <section className="manager-box">
+                      <p className="manager-eyebrow">Selected Cycle</p>
+                      <h2>{selectedEventCycle?.name ?? "No cycle selected"}</h2>
+                      <dl className="detail-list">
+                        <div>
+                          <dt>Phase</dt>
+                          <dd>{selectedEventCycle?.phase ?? "None"}</dd>
+                        </div>
+                        <div>
+                          <dt>Preview tiles</dt>
+                          <dd>{summarizeNames(selectedEventCycle?.previewTileNames)}</dd>
+                        </div>
+                        <div>
+                          <dt>Active tiles</dt>
+                          <dd>{summarizeNames(selectedEventCycle?.activeTileNames)}</dd>
+                        </div>
+                        <div>
+                          <dt>Cleanup tiles</dt>
+                          <dd>{summarizeNames(selectedEventCycle?.cleanupTileNames)}</dd>
+                        </div>
+                        <div>
+                          <dt>Cleanup after</dt>
+                          <dd>{formatDateTime(selectedEventCycle?.cleanupDeleteAfter)}</dd>
+                        </div>
+                        <div>
+                          <dt>Last action</dt>
+                          <dd>{selectedEventCycle?.lastAction ?? "No action recorded"}</dd>
+                        </div>
+                      </dl>
+                    </section>
+                  </div>
+                </section>
+              )}
+
               {activeTab === "remote" && (
                 <section className="manager-panel">
                   <div className="manager-columns">
@@ -795,6 +1019,42 @@ export default function App() {
                       <button type="button" className="manager-button" onClick={logout}>
                         Clear Remote Session
                       </button>
+                    </section>
+
+                    <section className="manager-box">
+                      <p className="manager-eyebrow">Manual Login Recovery</p>
+                      <h2>Steam / MyRealm</h2>
+                      <dl className="detail-list">
+                        <div>
+                          <dt>Steam client</dt>
+                          <dd>{steamStatus ? (steamStatus.running ? "Running" : "Not running") : "Not checked"}</dd>
+                        </div>
+                        <div>
+                          <dt>Steam account</dt>
+                          <dd>{steamStatus?.accountName || "Not configured or hidden"}</dd>
+                        </div>
+                        <div>
+                          <dt>MyRealm session</dt>
+                          <dd>{dashboard?.myRealmSession ? dashboard.myRealmSession.realmName : "Not loaded"}</dd>
+                        </div>
+                      </dl>
+                      <div className="button-grid">
+                        <button type="button" className="manager-button" onClick={() => void refreshSteamStatus()} disabled={Boolean(busyAction)}>
+                          Check Steam
+                        </button>
+                        <button type="button" className="manager-button" onClick={() => void startSteamLogin()} disabled={Boolean(busyAction)}>
+                          {busyAction === "steam-login" ? "Starting..." : "Start Steam Login"}
+                        </button>
+                        <button type="button" className="manager-button manager-button-primary" onClick={() => void openMyRealmLogin()} disabled={Boolean(busyAction)}>
+                          {busyAction === "myrealm-login" ? "Opening..." : "Open MyRealm Login"}
+                        </button>
+                        <button type="button" className="manager-button" onClick={() => void openMyRealmDashboard()} disabled={Boolean(busyAction)}>
+                          Open MyRealm Dashboard
+                        </button>
+                      </div>
+                      <p className="muted">
+                        Use one managed browser window to finish Steam/MyRealm sign-in. If a window was opened recently, reuse it instead of opening more.
+                      </p>
                     </section>
 
                     <section className="manager-box">
