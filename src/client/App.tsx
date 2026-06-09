@@ -33,6 +33,8 @@ type ApiError = Error & {
   status?: number;
 };
 
+type HostProfile = DashboardState["config"]["profiles"][number];
+
 const REMOTE_TOKEN_KEY = "lo-manager-remote-token";
 
 const remoteTabs: Array<{ id: RemoteTab; label: string }> = [
@@ -193,6 +195,42 @@ function formatChatLine(entry: GameBridgeChatEntry) {
   const location = entry.tileName || entry.mapName || "Unknown tile";
   const player = entry.playerName || "Unknown";
   return `${location} - ${player}: ${entry.message}`;
+}
+
+function findProfileLiveServer(profile: HostProfile, servers: LiveServerSummary[]) {
+  const profileIdentifier = profile.launch.identifier?.trim().toLowerCase();
+  const byIdentifier = profileIdentifier
+    ? servers.find((server) => server.identifier?.trim().toLowerCase() === profileIdentifier)
+    : null;
+
+  if (byIdentifier) {
+    return byIdentifier;
+  }
+
+  return (
+    servers.find((server) => server.gamePort !== null && server.gamePort === profile.launch.port) ??
+    servers.find((server) => profile.launch.queryPort !== null && server.queryPort !== null && server.queryPort === profile.launch.queryPort) ??
+    null
+  );
+}
+
+function formatHostMap(profile: HostProfile, servers: LiveServerSummary[]) {
+  const server = findProfileLiveServer(profile, servers);
+  if (!server) {
+    return "Offline";
+  }
+
+  return server.map?.trim() || "Starting / no tile yet";
+}
+
+function formatHostStatus(profile: HostProfile, servers: LiveServerSummary[]) {
+  const server = findProfileLiveServer(profile, servers);
+  if (!server) {
+    return "Stopped";
+  }
+
+  const pid = server.processId ? `PID ${server.processId}` : "no PID";
+  return `${server.status} - ${pid}`;
 }
 
 export default function App() {
@@ -451,6 +489,52 @@ export default function App() {
     });
   }
 
+  async function startHost(profile: HostProfile) {
+    await runAction(`start-host-${profile.id}`, `Start request was sent for ${profile.name}.`, async () => {
+      const result = await apiFetch<{ dashboard?: DashboardState }>("/api/server/start", {
+        method: "POST",
+        body: JSON.stringify({ profileId: profile.id }),
+      });
+      if (result.dashboard) {
+        setDashboard(result.dashboard);
+      }
+    });
+  }
+
+  async function stopHost(profile: HostProfile) {
+    const confirmed = window.confirm(`Stop ${profile.name} now?`);
+    if (!confirmed) {
+      return;
+    }
+
+    await runAction(`stop-host-${profile.id}`, `Stop request was sent for ${profile.name}.`, async () => {
+      const result = await apiFetch<{ dashboard?: DashboardState }>("/api/server/stop-profile", {
+        method: "POST",
+        body: JSON.stringify({ profileId: profile.id, force: false }),
+      });
+      if (result.dashboard) {
+        setDashboard(result.dashboard);
+      }
+    });
+  }
+
+  async function restartHost(profile: HostProfile) {
+    const confirmed = window.confirm(`Restart ${profile.name} now?`);
+    if (!confirmed) {
+      return;
+    }
+
+    await runAction(`restart-host-${profile.id}`, `Restart request was sent for ${profile.name}.`, async () => {
+      const result = await apiFetch<{ dashboard?: DashboardState }>("/api/server/restart-profile", {
+        method: "POST",
+        body: JSON.stringify({ profileId: profile.id, force: false }),
+      });
+      if (result.dashboard) {
+        setDashboard(result.dashboard);
+      }
+    });
+  }
+
   async function checkServerUpdate() {
     await runAction("check-server-update", "Server update check finished.", async () => {
       await apiFetch<{ result: unknown }>("/api/maintenance/check-game-update", {
@@ -586,12 +670,60 @@ export default function App() {
             <p>{profiles.length ? `${profiles.length} configured host profiles` : "Waiting for manager state"}</p>
             <div className="host-list">
               {profiles.length ? (
-                profiles.map((profile) => (
-                  <div key={profile.id} className={`host-row ${profile.id === selectedProfile?.id ? "host-row-active" : ""}`}>
-                    <span>{profile.name}</span>
-                    <small>{profile.launch.identifier}</small>
-                  </div>
-                ))
+                profiles.map((profile) => {
+                  const server = findProfileLiveServer(profile, dashboard?.liveServers ?? []);
+                  const actionBusy =
+                    busyAction === `start-host-${profile.id}` ||
+                    busyAction === `stop-host-${profile.id}` ||
+                    busyAction === `restart-host-${profile.id}`;
+                  const hostIsRunning = Boolean(server?.processId);
+
+                  return (
+                    <article key={profile.id} className={`host-row ${profile.id === selectedProfile?.id ? "host-row-active" : ""}`}>
+                      <div className="host-row-main">
+                        <span>{profile.name}</span>
+                        <small>{profile.launch.identifier}</small>
+                      </div>
+                      <dl className="host-row-facts">
+                        <div>
+                          <dt>Map</dt>
+                          <dd>{formatHostMap(profile, dashboard?.liveServers ?? [])}</dd>
+                        </div>
+                        <div>
+                          <dt>Status</dt>
+                          <dd>{formatHostStatus(profile, dashboard?.liveServers ?? [])}</dd>
+                        </div>
+                      </dl>
+                      <div className="host-actions">
+                        <button
+                          type="button"
+                          className="manager-button manager-button-small"
+                          onClick={() => void startHost(profile)}
+                          disabled={Boolean(busyAction) || hostIsRunning}
+                        >
+                          {busyAction === `start-host-${profile.id}` ? "Starting..." : "Start"}
+                        </button>
+                        <button
+                          type="button"
+                          className="manager-button manager-button-small"
+                          onClick={() => void restartHost(profile)}
+                          disabled={Boolean(busyAction)}
+                        >
+                          {busyAction === `restart-host-${profile.id}` ? "Restarting..." : "Restart"}
+                        </button>
+                        <button
+                          type="button"
+                          className="manager-button manager-button-small manager-button-danger"
+                          onClick={() => void stopHost(profile)}
+                          disabled={Boolean(busyAction) || !hostIsRunning}
+                        >
+                          {busyAction === `stop-host-${profile.id}` ? "Stopping..." : "Stop"}
+                        </button>
+                      </div>
+                      {actionBusy && <small className="host-action-note">Working on this host...</small>}
+                    </article>
+                  );
+                })
               ) : (
                 <div className="host-row">
                   <span>No profiles loaded</span>

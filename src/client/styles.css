@@ -204,7 +204,7 @@ th {
 
 .host-row {
   display: grid;
-  gap: 3px;
+  gap: 8px;
   padding: 9px 10px;
   border: 1px solid var(--line-soft);
   border-radius: 6px;
@@ -218,6 +218,51 @@ th {
 
 .host-row small {
   color: var(--muted);
+}
+
+.host-row-main {
+  display: grid;
+  gap: 3px;
+}
+
+.host-row-main span {
+  font-weight: 700;
+}
+
+.host-row-facts {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.host-row-facts div {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.host-row-facts dt {
+  font-size: 0.76rem;
+}
+
+.host-row-facts dd {
+  font-size: 0.82rem;
+}
+
+.host-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.host-actions .manager-button-small {
+  min-height: 32px;
+  padding: 6px 7px;
+  font-size: 0.78rem;
+}
+
+.host-action-note {
+  color: var(--accent);
 }
 
 .compact-facts,

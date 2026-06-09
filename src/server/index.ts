@@ -21,7 +21,7 @@ import {
   syncScheduler,
   updateModsAndPlanRestart,
 } from "./automation.js";
-import { buildDashboardState, buildLaunchStatus, checkGameUpdate, countServerProcesses, createBackup, detectLocalNetworkIp, detectPublicIp, getConfiguredServerAdminDataPath, getConfiguredServerInstallPath, getConfiguredServerLogsPath, installSteamCmd, listServerProcesses, readLogTail, startAllServers, startServer, stopServer, syncMods, updateGame } from "./serverManager.js";
+import { buildDashboardState, buildLaunchStatus, checkGameUpdate, collectLiveServers, countServerProcesses, createBackup, detectLocalNetworkIp, detectPublicIp, getConfiguredServerAdminDataPath, getConfiguredServerInstallPath, getConfiguredServerLogsPath, installSteamCmd, listServerProcesses, readLogTail, startAllServers, startServer, stopServer, syncMods, updateGame } from "./serverManager.js";
 import { inspectMyRealmFlow } from "./myRealmInspector.js";
 import {
   isCurrentlyCreatedMyRealmTile,
@@ -120,8 +120,53 @@ function buildConfigCacheKey(config: Awaited<ReturnType<typeof loadConfig>>) {
   });
 }
 
+function liveServerMatchesProfile(
+  server: Awaited<ReturnType<typeof collectLiveServers>>[number],
+  profile: Awaited<ReturnType<typeof loadConfig>>["profiles"][number],
+) {
+  const profileIdentifier = profile.launch.identifier?.trim().toLowerCase();
+  const serverIdentifier = server.identifier?.trim().toLowerCase();
+
+  if (profileIdentifier && serverIdentifier && profileIdentifier === serverIdentifier) {
+    return true;
+  }
+
+  if (server.gamePort !== null && server.gamePort === profile.launch.port) {
+    return true;
+  }
+
+  if (profile.launch.queryPort !== null && server.queryPort !== null && server.queryPort === profile.launch.queryPort) {
+    return true;
+  }
+
+  return false;
+}
+
+async function resolveProfileLiveServers(
+  config: Awaited<ReturnType<typeof loadConfig>>,
+  profile: Awaited<ReturnType<typeof loadConfig>>["profiles"][number],
+) {
+  const liveServers = await collectLiveServers(config);
+  return liveServers.filter((server) => liveServerMatchesProfile(server, profile));
+}
+
+function describeProfileLiveServer(server: Awaited<ReturnType<typeof collectLiveServers>>[number] | null) {
+  if (!server) {
+    return "not running";
+  }
+
+  const map = server.map?.trim() || "not hosting yet";
+  const pid = server.processId ? `PID ${server.processId}` : "no PID";
+  return `${map}, ${server.status}, ${pid}`;
+}
+
 const startSchema = z.object({
   profileId: z.string().min(1),
+});
+
+const profileServerActionSchema = z.object({
+  profileId: z.string().min(1),
+  force: z.boolean().optional(),
 });
 
 const stopSchema = z.object({
@@ -1348,6 +1393,99 @@ app.post("/api/server/start", async (request, response) => {
     invalidateStateCaches();
     response.status(400).json({
       error: error instanceof Error ? error.message : "Failed to start the server process.",
+    });
+  }
+});
+
+app.post("/api/server/stop-profile", async (request, response) => {
+  try {
+    const payload = profileServerActionSchema.parse(request.body ?? {});
+    const config = await loadConfig();
+    const profile = config.profiles.find((entry) => entry.id === payload.profileId);
+
+    if (!profile) {
+      response.status(404).json({ error: `Profile not found: ${payload.profileId}` });
+      return;
+    }
+
+    cancelPendingMaintenance(`Manual stop requested for ${profile.name}. Cleared any queued maintenance action.`);
+    const liveServers = await resolveProfileLiveServers(config, profile);
+    const targetPids = [...new Set(liveServers.map((server) => server.processId).filter((pid): pid is number => Boolean(pid)))];
+
+    if (!targetPids.length) {
+      forgetDesiredProfiles([profile.id]);
+      recordSchedulerAction(`Stop requested for ${profile.name}, but no matching running process was found.`);
+      invalidateStateCaches();
+      const dashboard = await getCachedResponseState(config, true);
+      response.json({ ok: true, stopped: false, profileId: profile.id, dashboard });
+      return;
+    }
+
+    recordSchedulerAction(
+      `${payload.force ? "Force stop" : "Stop"} requested for ${profile.name}: ${liveServers.map(describeProfileLiveServer).join("; ")}.`,
+    );
+    for (const pid of targetPids) {
+      await stopServer(pid, payload.force ?? false);
+    }
+    forgetDesiredProfiles([profile.id]);
+    recordSchedulerAction(`Stopped ${profile.name}.`);
+    invalidateStateCaches();
+    const dashboard = await getCachedResponseState(config, true);
+    response.json({ ok: true, stopped: true, profileId: profile.id, pids: targetPids, dashboard });
+  } catch (error) {
+    recordSchedulerAction(error instanceof Error ? `Profile stop failed: ${error.message}` : "Profile stop failed.");
+    invalidateStateCaches();
+    response.status(400).json({
+      error: error instanceof Error ? error.message : "Failed to stop the selected host profile.",
+    });
+  }
+});
+
+app.post("/api/server/restart-profile", async (request, response) => {
+  let profileId: string | null = null;
+
+  try {
+    const payload = profileServerActionSchema.parse(request.body ?? {});
+    profileId = payload.profileId;
+    const config = await loadConfig();
+    const profile = config.profiles.find((entry) => entry.id === payload.profileId);
+
+    if (!profile) {
+      response.status(404).json({ error: `Profile not found: ${payload.profileId}` });
+      return;
+    }
+
+    cancelPendingMaintenance(`Manual restart requested for ${profile.name}. Cleared any queued maintenance action.`);
+    const liveServers = await resolveProfileLiveServers(config, profile);
+    const targetPids = [...new Set(liveServers.map((server) => server.processId).filter((pid): pid is number => Boolean(pid)))];
+
+    if (targetPids.length) {
+      recordSchedulerAction(`Restart requested for ${profile.name}. Stopping ${liveServers.map(describeProfileLiveServer).join("; ")} first.`);
+      for (const pid of targetPids) {
+        await stopServer(pid, payload.force ?? false);
+      }
+    } else {
+      recordSchedulerAction(`Restart requested for ${profile.name}, but no matching running process was found. Starting it fresh.`);
+    }
+
+    forgetDesiredProfiles([profile.id]);
+    markDesiredProfiles([profile.id]);
+    invalidateStateCaches();
+    const started = await startServer(profile, {
+      activeModIds: config.operationsSettings.modIds,
+    });
+    recordSchedulerAction(`Restarted ${profile.name} on PID ${started.pid}.`);
+    invalidateStateCaches();
+    const dashboard = await getCachedResponseState(config, true);
+    response.json({ ok: true, profileId: profile.id, stoppedPids: targetPids, started, dashboard });
+  } catch (error) {
+    if (profileId) {
+      forgetDesiredProfiles([profileId]);
+    }
+    recordSchedulerAction(error instanceof Error ? `Profile restart failed: ${error.message}` : "Profile restart failed.");
+    invalidateStateCaches();
+    response.status(400).json({
+      error: error instanceof Error ? error.message : "Failed to restart the selected host profile.",
     });
   }
 });
