@@ -626,16 +626,27 @@ export default function App() {
     }
 
     await runAction("admin-message", "Admin message was queued for the in-game bridge.", async () => {
+      const payload: {
+        message: string;
+        durationSeconds: number;
+        targetScope: BridgeTargetOption["scope"];
+        targetIdentifier?: string;
+        targetLabel: string;
+        withWidget: boolean;
+      } = {
+        message: adminMessage.trim(),
+        durationSeconds: 12,
+        targetScope: selectedBridgeTarget.scope,
+        targetLabel: selectedBridgeTarget.tileName ?? selectedBridgeTarget.label,
+        withWidget: adminWithWidget,
+      };
+      if (selectedBridgeTarget.scope === "tile" && selectedBridgeTarget.identifier) {
+        payload.targetIdentifier = selectedBridgeTarget.identifier;
+      }
+
       await apiFetch<{ message: unknown }>("/api/message-bridge/admin-message", {
         method: "POST",
-        body: JSON.stringify({
-          message: adminMessage.trim(),
-          durationSeconds: 12,
-          targetScope: selectedBridgeTarget.scope,
-          targetIdentifier: selectedBridgeTarget.identifier,
-          targetLabel: selectedBridgeTarget.tileName ?? selectedBridgeTarget.label,
-          withWidget: adminWithWidget,
-        }),
+        body: JSON.stringify(payload),
       });
       setAdminMessage("");
     });

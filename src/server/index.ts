@@ -230,8 +230,8 @@ const gameBridgeAdminMessageSchema = z.object({
   severity: gameBridgeSeveritySchema.optional(),
   durationSeconds: z.coerce.number().int().min(3).max(600).optional(),
   targetScope: gameBridgeTargetScopeSchema.optional(),
-  targetIdentifier: z.string().trim().max(100).optional(),
-  targetLabel: z.string().trim().max(120).optional(),
+  targetIdentifier: z.string().trim().max(100).nullable().optional(),
+  targetLabel: z.string().trim().max(120).nullable().optional(),
   withWidget: z.coerce.boolean().optional(),
 });
 

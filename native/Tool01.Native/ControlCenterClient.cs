@@ -381,9 +381,24 @@ internal sealed class ControlCenterClient : IDisposable
         bool withWidget,
         CancellationToken cancellationToken = default)
     {
+        var payload = new Dictionary<string, object?>
+        {
+            ["message"] = message,
+            ["severity"] = severity,
+            ["durationSeconds"] = durationSeconds,
+            ["title"] = "Admin",
+            ["targetScope"] = targetScope,
+            ["targetLabel"] = targetLabel,
+            ["withWidget"] = withWidget,
+        };
+        if (!string.IsNullOrWhiteSpace(targetIdentifier))
+        {
+            payload["targetIdentifier"] = targetIdentifier;
+        }
+
         using var response = await _httpClient.PostAsJsonAsync(
             "/api/message-bridge/admin-message",
-            new { message, severity, durationSeconds, title = "Admin", targetScope, targetIdentifier, targetLabel, withWidget },
+            payload,
             JsonOptions,
             cancellationToken);
         return await ReadResponseAsync<GameBridgeSendEnvelope>(response, cancellationToken);
