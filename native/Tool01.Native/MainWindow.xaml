@@ -1441,12 +1441,12 @@
                 <TabItem Header="Game Bridge">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="18">
-                            <TextBlock Text="Local bridge for restart warnings, update notices, admin messages, and future in-game chat capture. Choose the LOManagerBridge Inbox root once, then target all servers or one live tile by identifier."
+                            <TextBlock Text="Local bridge for restart warnings, update notices, admin messages, and future in-game chat capture. All servers writes one command per live tile identifier; one tile writes only that tile file."
                                        Foreground="{StaticResource SubtleTextBrush}"
                                        TextWrapping="Wrap"
                                        Margin="0,0,0,12" />
 
-                            <GroupBox Header="Mod Command Path">
+                            <GroupBox Header="LOManagerBridge Paths">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
@@ -1470,7 +1470,7 @@
                                              Grid.Column="1"
                                              x:Name="GameBridgeInboxRootPathTextBox"
                                              TextChanged="OperationsEditorChanged"
-                                             ToolTip="Root folder watched by LOManagerBridge. Defaults derive Admin.json, AdminNOwidget.json, Tiles, TilesNW, and TilesDC below this folder." />
+                                             ToolTip="Root folder watched by LOManagerBridge. Defaults derive the fallback files plus Tiles, TilesNW, and TilesDC below this folder." />
                                     <Button Grid.Row="0"
                                             Grid.Column="2"
                                             Content="Choose Inbox Root"
@@ -1478,7 +1478,7 @@
                                             ToolTip="Choose the LOManagerBridge Inbox folder. The manager will create missing files and subfolders automatically." />
                                     <TextBlock Grid.Row="1"
                                                Grid.Column="0"
-                                               Text="Admin.json path"
+                                               Text="Fallback Admin.json"
                                                VerticalAlignment="Center"
                                                Margin="0,8,0,0"
                                                Style="{StaticResource SectionLabelStyle}" />
@@ -1487,16 +1487,16 @@
                                              x:Name="GameBridgeCommandFilePathTextBox"
                                              Margin="0,8,0,0"
                                              TextChanged="OperationsEditorChanged"
-                                             ToolTip="Full path to the Admin.json file read by the LOManagerBridge mod." />
+                                             ToolTip="Fallback global widget file used only when the manager cannot find live tile identifiers, or for manual bridge testing." />
                                     <Button Grid.Row="1"
                                             Grid.Column="2"
                                             Content="Choose Admin.json"
                                             Margin="0,8,0,0"
                                             Click="BrowseGameBridgeCommandPathButton_Click"
-                                            ToolTip="Choose or create the Admin.json file that the LOManagerBridge mod reads." />
+                                            ToolTip="Choose or create the fallback Admin.json file." />
                                     <TextBlock Grid.Row="2"
                                                Grid.Column="0"
-                                               Text="AdminNOwidget"
+                                               Text="Fallback no-widget"
                                                VerticalAlignment="Center"
                                                Margin="0,8,0,0"
                                                Style="{StaticResource SectionLabelStyle}" />
@@ -1506,7 +1506,7 @@
                                              x:Name="GameBridgeNoWidgetCommandFilePathTextBox"
                                              Margin="0,8,0,0"
                                              TextChanged="OperationsEditorChanged"
-                                             ToolTip="Full path to AdminNOwidget.json for all-server messages that should not trigger the restart widget." />
+                                             ToolTip="Fallback global no-widget file used only when the manager cannot find live tile identifiers." />
                                     <TextBlock Grid.Row="3"
                                                Grid.Column="0"
                                                Text="Tile widget folder"
@@ -1519,7 +1519,7 @@
                                              x:Name="GameBridgeTileWidgetDirectoryTextBox"
                                              Margin="0,8,0,0"
                                              TextChanged="OperationsEditorChanged"
-                                             ToolTip="Folder for per-tile messages with widget support, normally Inbox\Tiles." />
+                                             ToolTip="Folder for live tile messages with widget support, normally Inbox\Tiles. All-server widget sends fan out here." />
                                     <TextBlock Grid.Row="4"
                                                Grid.Column="0"
                                                Text="Tile no-widget folder"
@@ -1532,7 +1532,7 @@
                                              x:Name="GameBridgeTileNoWidgetDirectoryTextBox"
                                              Margin="0,8,0,0"
                                              TextChanged="OperationsEditorChanged"
-                                             ToolTip="Folder for per-tile messages without widget support, normally Inbox\TilesNW." />
+                                             ToolTip="Folder for live tile messages without widget support, normally Inbox\TilesNW. All-server no-widget sends fan out here." />
                                     <TextBlock Grid.Row="5"
                                                Grid.Column="0"
                                                Text="Discord tile folder"
@@ -1597,14 +1597,14 @@
 
                             <WrapPanel Margin="0,0,0,12">
                                 <CheckBox x:Name="GameBridgeModMessagesCheckBox"
-                                          Content="Write Admin.json commands to the in-game mod"
+                                          Content="Write LOManagerBridge command files"
                                           Checked="OperationsEditorChanged"
                                           Unchecked="OperationsEditorChanged"
                                           Margin="0,0,18,8"
-                                          ToolTip="When enabled, every admin message and restart warning overwrites the configured Admin.json path with a fresh unique command id." />
+                                          ToolTip="When enabled, all-server sends write one file per live tile. Fallback Admin.json/AdminNOwidget files are used only when no live tile identifier is available." />
                                 <Button Content="Save Bridge Setting" Click="SaveOperationsButton_Click" />
                                 <Button Content="Refresh Bridge" Click="RefreshGameBridgeButton_Click" />
-                                <Button Content="Clear Queue" Click="ClearGameBridgeMessagesButton_Click" ToolTip="Clears queued manager-side message history. It does not change Admin.json." />
+                                <Button Content="Clear Queue" Click="ClearGameBridgeMessagesButton_Click" ToolTip="Clears queued manager-side message history. It does not change LOManagerBridge command files." />
                             </WrapPanel>
 
                             <GroupBox Header="Bridge Status">
@@ -1623,19 +1623,19 @@
                                              Height="80"
                                              TextWrapping="Wrap"
                                              VerticalScrollBarVisibility="Auto"
-                                             ToolTip="Writes an AdminMessage command to Admin.json for the LOManagerBridge mod to broadcast to all players." />
+                                             ToolTip="All servers writes an AdminMessage command to each live tile file. One tile writes only that tile file." />
                                     <WrapPanel Margin="0,8,0,0">
                                         <TextBlock Text="Target" VerticalAlignment="Center" Style="{StaticResource SectionLabelStyle}" Margin="0,0,8,0" />
                                         <ComboBox x:Name="GameBridgeTargetComboBox"
                                                   Width="260"
                                                   DisplayMemberPath="Label"
-                                                  ToolTip="Choose all servers or one live tile identifier for this admin message." />
+                                                  ToolTip="All servers fans out to every live tile identifier. One live tile writes only that identifier's file." />
                                         <CheckBox x:Name="GameBridgeWithWidgetCheckBox"
                                                   Content="Use widget path"
                                                   IsChecked="True"
                                                   VerticalAlignment="Center"
                                                   Margin="12,0,16,0"
-                                                  ToolTip="Enabled writes to Admin.json or Tiles. Disabled writes to AdminNOwidget.json or TilesNW." />
+                                                  ToolTip="Enabled uses the Tiles folder. Disabled uses the TilesNW folder. Restart warnings use widget-capable tile files so the countdown can appear." />
                                         <TextBlock Text="Seconds" VerticalAlignment="Center" Style="{StaticResource SectionLabelStyle}" Margin="0,0,8,0" />
                                         <TextBox x:Name="AdminGameMessageDurationTextBox" Width="70" Text="12" />
                                         <Button Content="Queue Admin Message" Click="SendGameBridgeAdminMessageButton_Click" />

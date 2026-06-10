@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getProfileDataPath, loadConfig } from "./configStore.js";
+import { collectLiveServers } from "./serverManager.js";
 import type {
   AppConfig,
   GameBridgeChatEntry,
@@ -243,13 +244,53 @@ function normalizeBridgePath(value: string) {
   return toWindowsPath(path.resolve(value));
 }
 
+function sameBridgePath(left: string | null | undefined, right: string | null | undefined) {
+  if (!left || !right) {
+    return false;
+  }
+
+  return normalizeBridgePath(left).toLowerCase() === normalizeBridgePath(right).toLowerCase();
+}
+
+function inferInboxRootFromDirectory(value: string | null | undefined) {
+  const configuredDirectory = value?.trim();
+  if (!configuredDirectory) {
+    return null;
+  }
+
+  const normalizedDirectory = normalizeBridgePath(configuredDirectory);
+  const folderName = path.basename(normalizedDirectory).toLowerCase();
+  if (folderName !== "tiles" && folderName !== "tilesnw" && folderName !== "tilesdc") {
+    return null;
+  }
+
+  return normalizeBridgePath(path.dirname(normalizedDirectory));
+}
+
+function inferInboxRootFromTilePaths(config: AppConfig) {
+  return (
+    inferInboxRootFromDirectory(config.operationsSettings.gameBridgeTileWidgetDirectory) ??
+    inferInboxRootFromDirectory(config.operationsSettings.gameBridgeTileNoWidgetDirectory) ??
+    inferInboxRootFromDirectory(config.operationsSettings.gameBridgeTileDiscordDirectory)
+  );
+}
+
 function resolveConfiguredInboxRoot(config: AppConfig) {
+  const inferredTileRoot = inferInboxRootFromTilePaths(config);
   const configuredRoot = config.operationsSettings.gameBridgeInboxRootPath?.trim();
   if (configuredRoot) {
     const rootPath = path.basename(configuredRoot).toLowerCase().endsWith(".json")
       ? path.dirname(configuredRoot)
       : configuredRoot;
-    return normalizeBridgePath(rootPath);
+    const normalizedRootPath = normalizeBridgePath(rootPath);
+    if (
+      inferredTileRoot &&
+      sameBridgePath(normalizedRootPath, DEFAULT_GAME_BRIDGE_INBOX_ROOT_PATH) &&
+      !sameBridgePath(inferredTileRoot, DEFAULT_GAME_BRIDGE_INBOX_ROOT_PATH)
+    ) {
+      return inferredTileRoot;
+    }
+    return normalizedRootPath;
   }
 
   const configuredCommandPath = config.operationsSettings.gameBridgeCommandFilePath?.trim();
@@ -257,16 +298,28 @@ function resolveConfiguredInboxRoot(config: AppConfig) {
     const rootPath = path.basename(configuredCommandPath).toLowerCase().endsWith(".json")
       ? path.dirname(configuredCommandPath)
       : configuredCommandPath;
-    return normalizeBridgePath(rootPath);
+    const normalizedRootPath = normalizeBridgePath(rootPath);
+    if (
+      inferredTileRoot &&
+      sameBridgePath(normalizedRootPath, DEFAULT_GAME_BRIDGE_INBOX_ROOT_PATH) &&
+      !sameBridgePath(inferredTileRoot, DEFAULT_GAME_BRIDGE_INBOX_ROOT_PATH)
+    ) {
+      return inferredTileRoot;
+    }
+    return normalizedRootPath;
   }
 
-  return normalizeBridgePath(DEFAULT_GAME_BRIDGE_INBOX_ROOT_PATH);
+  return inferredTileRoot ?? normalizeBridgePath(DEFAULT_GAME_BRIDGE_INBOX_ROOT_PATH);
 }
 
 function resolveBridgeCommandTargetsFromConfig(config: AppConfig): BridgeCommandTargets {
   const inboxRootPath = resolveConfiguredInboxRoot(config);
   const configuredCommandPath = config.operationsSettings.gameBridgeCommandFilePath?.trim();
-  const globalWidgetPath = configuredCommandPath
+  const shouldDeriveGlobalWidgetFromRoot =
+    !configuredCommandPath ||
+    (sameBridgePath(configuredCommandPath, DEFAULT_GAME_BRIDGE_COMMAND_FILE_PATH) &&
+      !sameBridgePath(inboxRootPath, DEFAULT_GAME_BRIDGE_INBOX_ROOT_PATH));
+  const globalWidgetPath = !shouldDeriveGlobalWidgetFromRoot
     ? normalizeBridgePath(
         path.basename(configuredCommandPath).toLowerCase().endsWith(".json")
           ? configuredCommandPath
@@ -274,7 +327,12 @@ function resolveBridgeCommandTargetsFromConfig(config: AppConfig): BridgeCommand
       )
     : path.join(inboxRootPath, "Admin.json");
   const configuredNoWidgetPath = config.operationsSettings.gameBridgeNoWidgetCommandFilePath?.trim();
-  const globalNoWidgetPath = configuredNoWidgetPath
+  const defaultNoWidgetPath = path.join(DEFAULT_GAME_BRIDGE_INBOX_ROOT_PATH, "AdminNOwidget.json");
+  const shouldDeriveGlobalNoWidgetFromRoot =
+    !configuredNoWidgetPath ||
+    (sameBridgePath(configuredNoWidgetPath, defaultNoWidgetPath) &&
+      !sameBridgePath(inboxRootPath, DEFAULT_GAME_BRIDGE_INBOX_ROOT_PATH));
+  const globalNoWidgetPath = !shouldDeriveGlobalNoWidgetFromRoot
     ? normalizeBridgePath(
         path.basename(configuredNoWidgetPath).toLowerCase().endsWith(".json")
           ? configuredNoWidgetPath
@@ -333,13 +391,6 @@ async function resolveBridgeCommandFile(message?: GameBridgeMessage) {
 }
 
 function resolveBridgeCommandPath(message: GameBridgeMessage, targets: BridgeCommandTargets) {
-  if (message.type === "restart-warning" || message.type === "update-warning" || message.type === "maintenance") {
-    const countdownSeconds = typeof message.countdownSeconds === "number" ? message.countdownSeconds : null;
-    if (countdownSeconds !== null && countdownSeconds > 0 && countdownSeconds <= 300) {
-      return targets.globalWidgetPath;
-    }
-  }
-
   const targetScope = message.targetScope ?? (message.target === "tile" ? "tile" : "global");
   const withWidget = message.withWidget !== false;
   if (targetScope === "tile") {
@@ -350,7 +401,52 @@ function resolveBridgeCommandPath(message: GameBridgeMessage, targets: BridgeCom
     }
   }
 
+  if (message.type === "restart-warning" || message.type === "update-warning" || message.type === "maintenance") {
+    const countdownSeconds = typeof message.countdownSeconds === "number" ? message.countdownSeconds : null;
+    if (countdownSeconds !== null && countdownSeconds > 0 && countdownSeconds <= 300) {
+      return targets.globalWidgetPath;
+    }
+  }
+
   return withWidget ? targets.globalWidgetPath : targets.globalNoWidgetPath;
+}
+
+function canFanOutGlobalCommand(message: GameBridgeMessage) {
+  const targetScope = message.targetScope ?? (message.target === "tile" ? "tile" : "global");
+  if (targetScope !== "global") {
+    return false;
+  }
+
+  return (
+    message.type === "admin" ||
+    message.type === "restart-warning" ||
+    message.type === "update-warning" ||
+    message.type === "restart-now" ||
+    message.type === "maintenance"
+  );
+}
+
+async function resolveGlobalFanoutPaths(message: GameBridgeMessage, targets: BridgeCommandTargets) {
+  if (!canFanOutGlobalCommand(message)) {
+    return [];
+  }
+
+  const config = await loadConfig();
+  const liveServers = await collectLiveServers(config).catch(() => []);
+  const identifiers = new Set<string>();
+  for (const server of liveServers) {
+    const identifier = normalizeTargetIdentifier(server.identifier);
+    if (identifier) {
+      identifiers.add(identifier);
+    }
+  }
+
+  if (!identifiers.size) {
+    return [];
+  }
+
+  const directory = message.withWidget !== false ? targets.tileWidgetDirectory : targets.tileNoWidgetDirectory;
+  return [...identifiers].sort((left, right) => left.localeCompare(right)).map((identifier) => path.join(directory, `${identifier}.json`));
 }
 
 function buildBridgeCommand(message: GameBridgeMessage) {
@@ -415,6 +511,19 @@ async function writeBridgeCommandFile(message: GameBridgeMessage) {
     return null;
   }
 
+  const fanoutPaths = await resolveGlobalFanoutPaths(message, bridgeCommandFile).catch(() => []);
+  if (fanoutPaths.length) {
+    await Promise.all(
+      fanoutPaths.map(async (commandPath) => {
+        await fs.mkdir(path.dirname(commandPath), { recursive: true });
+        await fs.writeFile(commandPath, Buffer.from(JSON.stringify(command, null, 2), "utf8"));
+      }),
+    );
+    return fanoutPaths.length === 1
+      ? fanoutPaths[0]
+      : `${fanoutPaths.length} tile command files under ${toWindowsPath(path.dirname(fanoutPaths[0]))}`;
+  }
+
   await fs.mkdir(path.dirname(bridgeCommandFile.commandPath), { recursive: true });
   await fs.writeFile(bridgeCommandFile.commandPath, Buffer.from(JSON.stringify(command, null, 2), "utf8"));
   return bridgeCommandFile.commandPath;
@@ -429,7 +538,7 @@ async function buildStatus(store: MessageBridgeStore): Promise<InGameMessageBrid
   const inboxRootPath = bridgeCommandFile.inboxRootPath ? toWindowsPath(bridgeCommandFile.inboxRootPath) : null;
   const note = bridgeCommandFile.enabled
     ? bridgeCommandPath
-      ? `Local bridge queue is ready. Global widget commands use ${bridgeCommandPath}; global no-widget, tile, and Discord reply messages use the configured LOManagerBridge paths.`
+      ? `Local bridge queue is ready. All-server admin, restart, and update messages fan out to live tile files; if no live tile identifiers are found, the manager falls back to ${bridgeCommandPath}.`
       : "Local bridge queue is ready, but the LOManagerBridge inbox root is not configured."
     : "Local bridge queue is ready. LOManagerBridge command-file messages are disabled in Operations.";
 

@@ -976,6 +976,7 @@ export default function App() {
                         value={adminMessage}
                         onChange={(event) => setAdminMessage(event.target.value)}
                         placeholder="Admin message to broadcast in game"
+                        title="All servers writes one command to each live tile file. One tile writes only that tile file."
                         rows={5}
                       />
                       <label className="field-label" htmlFor="admin-message-target">
@@ -985,6 +986,7 @@ export default function App() {
                         id="admin-message-target"
                         value={adminTargetKey}
                         onChange={(event) => setAdminTargetKey(event.target.value)}
+                        title="All servers fans out to every live tile identifier. One live tile writes only that identifier's file."
                       >
                         {bridgeTargets.map((target) => {
                           const value = target.scope === "global" ? "global" : target.identifier ?? "global";
@@ -995,7 +997,7 @@ export default function App() {
                           );
                         })}
                       </select>
-                      <label className="check-row">
+                      <label className="check-row" title="Enabled uses the Tiles folder. Disabled uses the TilesNW folder. Restart warnings use widget-capable tile files so the countdown can appear.">
                         <input
                           type="checkbox"
                           checked={adminWithWidget}
