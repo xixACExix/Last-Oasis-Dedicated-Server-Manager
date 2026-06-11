@@ -927,7 +927,7 @@
                                     <TextBlock Grid.Row="5"
                                                Grid.Column="3"
                                                Text="15 / 10 / 5 / now"
-                                               Foreground="{StaticResource BodyTextBrush}"
+                                               Foreground="{StaticResource TextBrush}"
                                                ToolTip="Mod and dedicated server updates always queue one 15-minute restart plan. In-game warnings are sent at 15, 10, and 5 minutes; the 5 minute warning starts the widget." />
  
                                     <TextBlock Grid.Row="6" Grid.Column="0" Text="Server check every" Style="{StaticResource SectionLabelStyle}" />
