@@ -732,16 +732,21 @@
                                                TextWrapping="Wrap"
                                                Margin="0,0,0,10" />
 
-                                    <TextBlock Grid.Column="0" Grid.Row="2" Text="Warning minutes" Style="{StaticResource SectionLabelStyle}" />
-                                    <TextBox Grid.Column="1"
-                                             Grid.Row="2"
-                                             x:Name="RestartWarningMinutesTextBox"
-                                             TextChanged="ProfileEditorChanged"
-                                             ToolTip="Scheduled restarts send in-game warnings at 30, 15, 10, and 5 minutes. Discord posts only the first warning for the restart plan; the 5 minute in-game command starts the widget." />
+                                    <TextBlock Grid.Column="0" Grid.Row="2" Text="First warning" Style="{StaticResource SectionLabelStyle}" />
+                                    <ComboBox Grid.Column="1"
+                                              Grid.Row="2"
+                                              x:Name="RestartWarningMinutesComboBox"
+                                              SelectionChanged="ProfileEditorChanged"
+                                              ToolTip="Choose the first scheduled restart warning. The manager then sends the lower warning steps that fit: 15, 10, and 5 minutes. The 5 minute in-game command starts the widget.">
+                                        <ComboBoxItem Content="30 minutes" Tag="30" />
+                                        <ComboBoxItem Content="15 minutes" Tag="15" />
+                                        <ComboBoxItem Content="10 minutes" Tag="10" />
+                                        <ComboBoxItem Content="5 minutes" Tag="5" />
+                                    </ComboBox>
                                     <TextBlock Grid.Column="2" Grid.Row="2" Text="Current schedule" Style="{StaticResource SectionLabelStyle}" />
                                     <TextBlock Grid.Column="3"
                                                Grid.Row="2"
-                                               Text="Saved per selected host; Overview shows the next restart and skip state."
+                                               Text="Scheduled restart warnings use the selected first warning, then 15 / 10 / 5 when those fit."
                                                Foreground="{StaticResource SubtleTextBrush}"
                                                TextWrapping="Wrap"
                                                Margin="0,0,0,10" />

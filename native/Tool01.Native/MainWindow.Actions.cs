@@ -242,7 +242,7 @@ public partial class MainWindow
         profile.RestartPolicy.ScheduleMode = "fixed-times";
         profile.RestartPolicy.FixedTimes = BuildRestartTimesForDay(ParseRestartStartTime(RestartStartTimeTextBox.Text), restartsPerDay);
         profile.RestartPolicy.IntervalHours = Math.Max(1, 24 / restartsPerDay);
-        profile.RestartPolicy.GracefulWarningMinutes = Math.Max(30, ParseRequiredInt(RestartWarningMinutesTextBox.Text, "Restart warning minutes"));
+        profile.RestartPolicy.GracefulWarningMinutes = ParseRequiredInt(GetComboTag(RestartWarningMinutesComboBox, "30"), "Restart warning minutes");
 
         var response = await _client.SaveConfigAsync(config);
         _profileDirty = false;

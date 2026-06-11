@@ -12,6 +12,8 @@ C:\LastOasisServer\Mist\Content\Mods\LOManagerBridge\Inbox
 
 The inbox root can be changed in the manager under **Game Bridge** if the server is installed somewhere else.
 
+The manager must point at the live server root/inbox used by the running dedicated server processes, not the Steam workshop folder or the ModKit folder.
+
 ## Server Identifiers
 
 Each Last Oasis tile process should have an identifier in its launch arguments:
@@ -24,25 +26,25 @@ The manager uses the same identifier to route tile-specific messages. It also re
 
 ## Files The Manager Writes
 
-Global messages with widget support:
+Global fallback with widget support:
 
 ```text
 Inbox\Admin.json
 ```
 
-Global messages without widget support:
+Global fallback without widget support:
 
 ```text
 Inbox\AdminNOwidget.json
 ```
 
-Tile-specific admin messages with widget support:
+Tile messages with widget support:
 
 ```text
 Inbox\Tiles\realm_server_N.json
 ```
 
-Tile-specific admin messages without widget support:
+Tile messages without widget support:
 
 ```text
 Inbox\TilesNW\realm_server_N.json
@@ -54,7 +56,45 @@ Discord-to-game replies and slash-command messages:
 Inbox\TilesDC\realm_server_N.json
 ```
 
-`RestartWarning` commands are only written to the global widget file, `Inbox\Admin.json`, so every running tile can show the restart notice. Only the final 5-minute restart warning uses `RestartWarning`; earlier restart notices use normal admin chat messages.
+## All-Server Fanout
+
+For **All servers**, the manager now writes one command file per live tile identifier. If these servers are live:
+
+```text
+realm_server_1
+realm_server_2
+realm_server_3
+```
+
+then a widget-capable all-server message is written as:
+
+```text
+Inbox\Tiles\realm_server_1.json
+Inbox\Tiles\realm_server_2.json
+Inbox\Tiles\realm_server_3.json
+```
+
+and a no-widget all-server message is written as:
+
+```text
+Inbox\TilesNW\realm_server_1.json
+Inbox\TilesNW\realm_server_2.json
+Inbox\TilesNW\realm_server_3.json
+```
+
+This is the main routing path. `Inbox\Admin.json` and `Inbox\AdminNOwidget.json` are kept as configurable global fallback files. The manager only falls back to those global files when it cannot find any live tile identifiers.
+
+Targeting one tile writes only that tile file.
+
+## Widget Rules
+
+`AdminMessage` shows normal in-game chat.
+
+`RestartWarning` shows chat and can trigger the countdown widget when `seconds` is between `1` and `300`.
+
+The manager uses `RestartWarning` only for the final 5-minute restart warning. Earlier warnings, such as 30, 15, and 10 minutes, are sent as `AdminMessage` so they appear in chat without starting the widget early.
+
+Restart warnings can be written to the per-tile widget files under `Inbox\Tiles\realm_server_N.json`. This allows all-server restart warnings to fan out to every live tile instead of depending only on `Inbox\Admin.json`.
 
 ## JSON Format
 
@@ -89,17 +129,29 @@ Rules:
 3. Missing folders are created by the manager.
 4. After the mod reads a command, it clears that JSON file back to `{}`.
 5. If the file does not clear, the mod did not read that path.
+6. If an all-server message does not appear in game but tile-specific messages work, check that the manager can see live tile identifiers and that the `Tiles`/`TilesNW` folders match the mod paths.
 
 ## In-Game Restart Messages
 
 Scheduled restart:
 
 ```text
-Server restart in 30 minutes for a Scheduled Restart ({schedule})
-Server restart in 15 minutes for a Scheduled Restart ({schedule})
-Server restart in 10 minutes for a Scheduled Restart ({schedule})
+Server restart in {first-warning} minutes for a Scheduled Restart ({schedule})
+Server restart in 15 minutes for a Scheduled Restart ({schedule})  [when first warning is 30 or 15]
+Server restart in 10 minutes for a Scheduled Restart ({schedule})  [when first warning is 30, 15, or 10]
 Server restart in 5 minutes for a Scheduled Restart ({schedule})
 Server restarting now for a Scheduled Restart ({schedule})
+```
+
+The scheduled restart first-warning dropdown only allows `30`, `15`, `10`, or `5` minutes.
+
+Examples:
+
+```text
+30 minutes selected -> 30 / 15 / 10 / 5 / now
+15 minutes selected -> 15 / 10 / 5 / now
+10 minutes selected -> 10 / 5 / now
+5 minutes selected  -> 5 / now
 ```
 
 Mod update:

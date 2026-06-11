@@ -733,7 +733,7 @@ public partial class MainWindow : Window
         var firstRestartTime = ResolveFirstRestartTime(profile.RestartPolicy);
         RestartStartTimeTextBox.Text = firstRestartTime;
         SelectComboByValue(RestartTimesPerDayComboBox, InferRestartsPerDay(profile.RestartPolicy).ToString());
-        RestartWarningMinutesTextBox.Text = Math.Max(30, profile.RestartPolicy.GracefulWarningMinutes == 0 ? 30 : profile.RestartPolicy.GracefulWarningMinutes).ToString();
+        SelectComboByValue(RestartWarningMinutesComboBox, NormalizeRestartWarningMinutes(profile.RestartPolicy.GracefulWarningMinutes).ToString());
         UpdateRestartSchedulePreview();
         _profileDirty = false;
     }
@@ -948,6 +948,16 @@ public partial class MainWindow : Window
         }
 
         comboBox.SelectedIndex = 0;
+    }
+
+    private static int NormalizeRestartWarningMinutes(int value)
+    {
+        var configuredMinutes = value <= 0 ? 30 : value;
+        var supportedMinutes = new[] { 30, 15, 10, 5 };
+        return supportedMinutes
+            .OrderBy(minutes => Math.Abs(configuredMinutes - minutes))
+            .ThenByDescending(minutes => minutes)
+            .First();
     }
 
     private static string BuildBatchLabel(IEnumerable<long> tileIds, MyRealmSessionSnapshot? session)

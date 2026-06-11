@@ -54,6 +54,7 @@ const DESIRED_PROFILE_STARTUP_GRACE_MS = 20_000;
 const DEFAULT_RESTART_FIXED_TIMES = ["00:00", "12:00"] as const;
 const SCHEDULED_RESTART_COVER_WINDOW_MS = 90 * 60 * 1000;
 const SCHEDULED_RESTART_WARNING_MINUTES = 30;
+const SCHEDULED_RESTART_WARNING_OPTIONS = [30, 15, 10, 5] as const;
 const UPDATE_RESTART_DELAY_MINUTES = 15;
 const SAFE_STOP_DELAY_MINUTES = 10;
 const MAINTENANCE_ANNOUNCEMENT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
@@ -441,7 +442,49 @@ function buildSchedulerStatusSnapshot(config: AppConfig, profile = getPrimaryPro
   };
 }
 
-function getPendingMaintenanceWarningMinutes() {
+function uniqueWarningMinutes(values: number[]) {
+  const seen = new Set<number>();
+  const result: number[] = [];
+  for (const value of values) {
+    const minutes = Math.round(value);
+    if (!Number.isFinite(minutes) || minutes <= 0 || seen.has(minutes)) {
+      continue;
+    }
+
+    seen.add(minutes);
+    result.push(minutes);
+  }
+
+  return result;
+}
+
+function normalizeScheduledRestartWarningMinutes(value: number | null | undefined) {
+  const configuredMinutes = Number.isFinite(value) ? Math.round(value ?? SCHEDULED_RESTART_WARNING_MINUTES) : SCHEDULED_RESTART_WARNING_MINUTES;
+  return SCHEDULED_RESTART_WARNING_OPTIONS.reduce(
+    (best, candidate) => {
+      const bestDistance = Math.abs(configuredMinutes - best);
+      const candidateDistance = Math.abs(configuredMinutes - candidate);
+      if (candidateDistance < bestDistance || (candidateDistance === bestDistance && candidate > best)) {
+        return candidate;
+      }
+
+      return best;
+    },
+    SCHEDULED_RESTART_WARNING_MINUTES,
+  );
+}
+
+function getScheduledRestartFirstWarningMinutes(config: AppConfig) {
+  const profile =
+    pendingRestartProfileIds
+      .map((profileId) => config.profiles.find((entry) => entry.id === profileId))
+      .find((entry) => entry?.restartPolicy.enabled) ??
+    config.profiles.find((entry) => entry.id === config.selectedProfileId) ??
+    null;
+  return normalizeScheduledRestartWarningMinutes(profile?.restartPolicy.gracefulWarningMinutes);
+}
+
+function getPendingMaintenanceWarningMinutes(config: AppConfig) {
   if (pendingRestartSource === "mod-update" || pendingRestartSource === "game-update") {
     return [15, 10, 5];
   }
@@ -450,7 +493,8 @@ function getPendingMaintenanceWarningMinutes() {
     return [10, 5];
   }
 
-  return [30, 15, 10, 5];
+  const firstWarningMinutes = getScheduledRestartFirstWarningMinutes(config);
+  return uniqueWarningMinutes([firstWarningMinutes, ...SCHEDULED_RESTART_WARNING_OPTIONS.filter((minutes) => minutes < firstWarningMinutes)]);
 }
 
 function getPendingMaintenanceTitle() {
@@ -582,7 +626,7 @@ async function announceMaintenanceWarning(config: AppConfig, warningMinutes: num
 }
 
 async function scheduleMaintenanceWarnings(config: AppConfig, delayMs: number) {
-  const warningMinutes = getPendingMaintenanceWarningMinutes()
+  const warningMinutes = getPendingMaintenanceWarningMinutes(config)
     .filter((minutes) => minutes * 60 * 1000 <= delayMs + SCHEDULER_TICK_MS + 1_000)
     .sort((left, right) => right - left);
   const mentionWarningMinutes = warningMinutes[0] ?? 0;
@@ -2320,10 +2364,7 @@ async function evaluateScheduler() {
     return;
   }
 
-  const warningLeadMs = Math.max(
-    SCHEDULED_RESTART_WARNING_MINUTES,
-    profile.restartPolicy.gracefulWarningMinutes || SCHEDULED_RESTART_WARNING_MINUTES,
-  ) * 60 * 1000;
+  const warningLeadMs = normalizeScheduledRestartWarningMinutes(profile.restartPolicy.gracefulWarningMinutes) * 60 * 1000;
   if (Date.now() < nextScheduledRestartAt.getTime() - warningLeadMs) {
     return;
   }
