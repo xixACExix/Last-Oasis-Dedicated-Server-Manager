@@ -4,6 +4,16 @@ using System.IO;
 using System.Reflection;
 using System.Windows.Forms;
 
+[assembly: AssemblyTitle("Last Oasis Manager Installer")]
+[assembly: AssemblyDescription("Installer for Last Oasis Dedicated Server Manager")]
+[assembly: AssemblyCompany("Ace")]
+[assembly: AssemblyProduct("Last Oasis Dedicated Server Manager")]
+[assembly: AssemblyCopyright("Copyright (c) 2026 Ace")]
+[assembly: AssemblyTrademark("Made by Ace")]
+[assembly: AssemblyVersion("0.1.17.0")]
+[assembly: AssemblyFileVersion("0.1.17.0")]
+[assembly: AssemblyInformationalVersion("0.1.17")]
+
 internal static class Program
 {
     [STAThread]

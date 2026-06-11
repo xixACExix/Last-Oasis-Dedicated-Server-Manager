@@ -666,6 +666,7 @@ export default function App() {
           <p className="manager-eyebrow">Remote Control</p>
           <h1>Last Oasis Server Manager</h1>
           <p>Dedicated server controls for realm hosts, updates, restarts, in-game admin messages, and server chat.</p>
+          <p className="manager-credit">Made by Ace - MIT License</p>
         </div>
         <div className="manager-hero-status">
           <strong>{dashboard ? "Backend: online" : loginRequired ? "Login required" : "Backend: checking"}</strong>

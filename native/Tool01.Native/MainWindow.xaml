@@ -439,6 +439,8 @@
                     <TextBlock Text="Last Oasis Server Manager" Foreground="{StaticResource AccentBrush}" FontSize="34" FontWeight="Black" FontFamily="Bahnschrift SemiBold" Margin="0,8,0,4" />
                     <TextBlock Text="Dedicated server controls for realm hosts, restarts, mods, MyRealm, and event tile cycles."
                                Foreground="{StaticResource AccentBrush}" FontSize="15" TextWrapping="Wrap" />
+                    <TextBlock Text="Made by Ace - MIT License"
+                               Foreground="{StaticResource SubtleTextBrush}" FontSize="12" Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <TextBlock x:Name="BackendStateText" Text="Backend: checking..." FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Right" />

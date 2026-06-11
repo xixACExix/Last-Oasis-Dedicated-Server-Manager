@@ -7,6 +7,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\LastOasisManager.ico</ApplicationIcon>
+    <AssemblyTitle>Last Oasis Dedicated Server Tool</AssemblyTitle>
+    <Product>Last Oasis Dedicated Server Manager</Product>
+    <Company>Ace</Company>
+    <Authors>Ace</Authors>
+    <Description>Windows desktop manager for Last Oasis dedicated server tiles.</Description>
+    <Copyright>Copyright (c) 2026 Ace</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Version>0.1.17</Version>
+    <FileVersion>0.1.17.0</FileVersion>
+    <AssemblyVersion>0.1.17.0</AssemblyVersion>
+    <InformationalVersion>0.1.17</InformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

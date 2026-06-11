@@ -137,6 +137,12 @@ th {
   color: var(--accent);
 }
 
+.manager-hero .manager-credit {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
 .manager-eyebrow {
   margin: 0 0 8px;
   color: var(--accent);

@@ -150,6 +150,7 @@ $topLevelItems = @(
     "lo-tool.cmd",
     "stop-lo-tool.cmd",
     "install-tool_01.cmd",
+    "LICENSE",
     "package.json",
     "package-lock.json",
     "tsconfig.app.json",

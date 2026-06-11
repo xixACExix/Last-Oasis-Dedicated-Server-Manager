@@ -1,7 +1,9 @@
 {
   "name": "last-oasis-control-center",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "private": true,
+  "author": "Ace",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",

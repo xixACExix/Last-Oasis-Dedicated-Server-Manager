@@ -69,3 +69,7 @@ Set a remote password in the manager before using the web panel from another dev
 This release is Windows only for now.
 
 Keep MyRealm keys, provider keys, API keys, Discord webhooks, bot tokens, and Steam login details private.
+
+## License
+
+MIT License. Made by Ace.
