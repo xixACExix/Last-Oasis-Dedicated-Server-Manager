@@ -815,7 +815,6 @@ public partial class MainWindow : Window
         GameBridgeTileDiscordDirectoryTextBox.Text = operations.GameBridgeTileDiscordDirectory;
         ModUpdateCheckMinutesTextBox.Text = operations.ModUpdateCheckMinutes.ToString();
         GameUpdateCheckMinutesTextBox.Text = (operations.GameUpdateCheckMinutes > 0 ? operations.GameUpdateCheckMinutes : operations.ModUpdateCheckMinutes).ToString();
-        ModUpdateGraceMinutesTextBox.Text = Math.Max(15, operations.ModUpdateGraceMinutes).ToString();
         OfflineRestartGraceMinutesTextBox.Text = operations.OfflineRestartGraceMinutes.ToString();
         MyRealmWebhookTextBox.Text = string.IsNullOrWhiteSpace(operations.DiscordMyRealmWebhookUrl)
             ? (!string.IsNullOrWhiteSpace(operations.DiscordTileOnlineWebhookUrl)

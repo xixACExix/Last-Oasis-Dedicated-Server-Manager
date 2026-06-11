@@ -163,6 +163,8 @@ Server restart in 5 minutes for a Mod Update
 Server restarting now for a Mod Update
 ```
 
+Mod update restart warnings are fixed at `15 / 10 / 5 / now`. The **Mod check every** field in the manager only controls how often SteamCMD/workshop update checks run.
+
 Server update:
 
 ```text
@@ -171,6 +173,8 @@ Server restart in 10 minutes for a Server Update
 Server restart in 5 minutes for a Server Update
 Server restarting now for a Server Update
 ```
+
+Dedicated server update restart warnings are fixed at `15 / 10 / 5 / now`. The **Server check every** field in the manager only controls how often SteamCMD dedicated-server update checks run.
 
 Scheduled safe stop:
 

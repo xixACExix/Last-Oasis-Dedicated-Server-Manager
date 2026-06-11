@@ -917,18 +917,25 @@
                                          </WrapPanel>
                                      </StackPanel>
  
-                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Mod check minutes" Style="{StaticResource SectionLabelStyle}" />
-                                    <TextBox Grid.Row="5" Grid.Column="1" x:Name="ModUpdateCheckMinutesTextBox" TextChanged="OperationsEditorChanged" />
-                                    <TextBlock Grid.Row="5" Grid.Column="2" Text="Mod restart delay" Style="{StaticResource SectionLabelStyle}" />
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Mod check every" Style="{StaticResource SectionLabelStyle}" />
                                     <TextBox Grid.Row="5"
-                                             Grid.Column="3"
-                                             x:Name="ModUpdateGraceMinutesTextBox"
+                                             Grid.Column="1"
+                                             x:Name="ModUpdateCheckMinutesTextBox"
                                              TextChanged="OperationsEditorChanged"
-                                             IsReadOnly="True"
-                                             ToolTip="Mod and dedicated server updates queue a restart 15 minutes later. Warnings are sent at 15, 10, and 5 minutes." />
+                                             ToolTip="How often the manager checks the configured Workshop mod IDs for updates." />
+                                    <TextBlock Grid.Row="5" Grid.Column="2" Text="Update restart warnings" Style="{StaticResource SectionLabelStyle}" />
+                                    <TextBlock Grid.Row="5"
+                                               Grid.Column="3"
+                                               Text="15 / 10 / 5 / now"
+                                               Foreground="{StaticResource BodyTextBrush}"
+                                               ToolTip="Mod and dedicated server updates always queue one 15-minute restart plan. In-game warnings are sent at 15, 10, and 5 minutes; the 5 minute warning starts the widget." />
  
-                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Server update minutes" Style="{StaticResource SectionLabelStyle}" />
-                                    <TextBox Grid.Row="6" Grid.Column="1" x:Name="GameUpdateCheckMinutesTextBox" TextChanged="OperationsEditorChanged" />
+                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Server check every" Style="{StaticResource SectionLabelStyle}" />
+                                    <TextBox Grid.Row="6"
+                                             Grid.Column="1"
+                                             x:Name="GameUpdateCheckMinutesTextBox"
+                                             TextChanged="OperationsEditorChanged"
+                                             ToolTip="How often the manager checks SteamCMD for a dedicated server update." />
                                     <TextBlock Grid.Row="6" Grid.Column="2" Text="Offline restart grace" Style="{StaticResource SectionLabelStyle}" />
                                     <TextBox Grid.Row="6" Grid.Column="3" x:Name="OfflineRestartGraceMinutesTextBox" TextChanged="OperationsEditorChanged" />
 
@@ -983,7 +990,7 @@
                                                                 Foreground="{StaticResource SubtleTextBrush}"
                                                                 TextWrapping="Wrap"
                                                                 Margin="0,0,0,12" />
-                                                     <TextBlock Text="Automatic dedicated server updates can be enabled in Setup / Webhooks. They use the same shared plan and the Server update minutes interval."
+                                                     <TextBlock Text="Automatic dedicated server updates can be enabled in Setup / Webhooks. They use the same shared restart plan and the Server check every interval."
                                                                 Foreground="{StaticResource SubtleTextBrush}"
                                                                 TextWrapping="Wrap"
                                                                 Margin="0,0,0,12" />
