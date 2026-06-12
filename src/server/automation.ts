@@ -9,7 +9,17 @@ import { scanGameChatLogs } from "./gameLogChatWatcher.js";
 import { queueGameMessage } from "./messageBridge.js";
 import { inspectMyRealmFlow } from "./myRealmInspector.js";
 import { loadMyRealmSessionSnapshot } from "./myRealmSession.js";
-import { checkGameUpdate, collectLiveServers, listServerProcesses, readMods, startServer, stopServer, syncMods, updateGame } from "./serverManager.js";
+import {
+  checkGameUpdate,
+  collectLiveServers,
+  listServerProcesses,
+  readMods,
+  serverProcessMatchesProfiles,
+  startServer,
+  stopConfiguredServerProcesses,
+  syncMods,
+  updateGame,
+} from "./serverManager.js";
 
 let activeConfig: AppConfig | null = null;
 let timerHandle: NodeJS.Timeout | null = null;
@@ -1484,6 +1494,13 @@ async function resolveRestartTargets(config: AppConfig, preferredProfile?: AppCo
   }
 
   const runningProcesses = await listServerProcesses();
+  const hasConfiguredRootProcess = runningProcesses.some((processInfo) =>
+    serverProcessMatchesProfiles(processInfo, config.profiles, { includeServerRoot: true }),
+  );
+  if (hasConfiguredRootProcess) {
+    return orderProfiles(dedupeProfiles(config.profiles));
+  }
+
   const runningProfileIds = matchRunningProfileIds(config, runningProcesses);
   const runningProfiles = config.profiles.filter((profile) => runningProfileIds.has(profile.id));
   if (runningProfiles.length) {
@@ -1495,8 +1512,7 @@ async function resolveRestartTargets(config: AppConfig, preferredProfile?: AppCo
 
 async function resolveRunningHostPoolTargets(config: AppConfig) {
   const runningProcesses = await listServerProcesses();
-  const runningProfileIds = matchRunningProfileIds(config, runningProcesses);
-  const runningProfiles = config.profiles.filter((profile) => runningProfileIds.has(profile.id));
+  const runningProfiles = resolveRunningConfiguredHostTargets(config, runningProcesses);
   if (runningProfiles.length) {
     return orderProfiles(dedupeProfiles(runningProfiles));
   }
@@ -1510,6 +1526,13 @@ async function resolveRunningHostPoolTargets(config: AppConfig) {
 }
 
 function resolveRunningConfiguredHostTargets(config: AppConfig, runningProcesses: Awaited<ReturnType<typeof listServerProcesses>>) {
+  const hasConfiguredRootProcess = runningProcesses.some((processInfo) =>
+    serverProcessMatchesProfiles(processInfo, config.profiles, { includeServerRoot: true }),
+  );
+  if (hasConfiguredRootProcess) {
+    return orderProfiles(dedupeProfiles(config.profiles));
+  }
+
   const runningProfileIds = matchRunningProfileIds(config, runningProcesses);
   const runningProfiles = config.profiles.filter((profile) => runningProfileIds.has(profile.id));
   return orderProfiles(dedupeProfiles(runningProfiles));
@@ -1517,14 +1540,9 @@ function resolveRunningConfiguredHostTargets(config: AppConfig, runningProcesses
 
 async function stopMaintenanceTargetProcesses(config: AppConfig, profiles: AppConfig["profiles"]) {
   const runningProcesses = await listServerProcesses();
-  const targetPids = runningProcesses
-    .filter((processInfo) => {
-      const hints = parseProcessHints(processInfo.commandLine);
-      return profiles.some((profile) => profileMatchesProcessHints(profile, hints));
-    })
-    .map((processInfo) => processInfo.pid);
+  const result = await stopConfiguredServerProcesses(profiles);
 
-  if (!targetPids.length) {
+  if (!result.stoppedPids.length) {
     if (runningProcesses.length) {
       throw new Error("No running Last Oasis process matched the queued maintenance targets, so the manager refused to stop unrelated hosts.");
     }
@@ -1532,8 +1550,8 @@ async function stopMaintenanceTargetProcesses(config: AppConfig, profiles: AppCo
     return;
   }
 
-  for (const targetPid of targetPids) {
-    await stopServer(targetPid, false);
+  if (result.remainingPids.length) {
+    throw new Error(`The manager stopped the queued hosts, but PID(s) ${result.remainingPids.join(", ")} were still running afterward.`);
   }
 }
 

@@ -593,12 +593,80 @@ function parseLaunchHints(processInfo: ServerProcess): ProcessLaunchHints {
   };
 }
 
+function launchHintsMatchProfile(hints: Pick<ProcessLaunchHints, "identifier" | "gamePort" | "queryPort">, profile: AppConfig["profiles"][number]) {
+  const identifierMatches = hints.identifier !== null && profile.launch.identifier.toLowerCase() === hints.identifier.toLowerCase();
+  const gamePortMatches = hints.gamePort !== null && profile.launch.port === hints.gamePort;
+  const queryPortMatches =
+    hints.queryPort !== null && profile.launch.queryPort !== null && profile.launch.queryPort === hints.queryPort;
+
+  return identifierMatches || gamePortMatches || queryPortMatches;
+}
+
+function extractProcessExecutablePath(commandLine: string | null | undefined) {
+  const normalizedCommandLine = commandLine?.trim() ?? "";
+  if (!normalizedCommandLine) {
+    return "";
+  }
+
+  const quotedMatch = normalizedCommandLine.match(/^"([^"]+?\.exe)"/i);
+  if (quotedMatch?.[1]) {
+    return quotedMatch[1];
+  }
+
+  const unquotedMatch = normalizedCommandLine.match(/^([A-Za-z]:\\[^\s"]+?\.exe)\b/i);
+  return unquotedMatch?.[1] ?? "";
+}
+
+function getProcessExecutablePath(processInfo: ServerProcess) {
+  return processInfo.executablePath?.trim() || extractProcessExecutablePath(processInfo.commandLine);
+}
+
+function processRunsUnderServerRoot(processInfo: ServerProcess, serverInstallRoot: string) {
+  const normalizedRoot = serverInstallRoot.trim();
+  if (!normalizedRoot) {
+    return false;
+  }
+
+  const executablePath = getProcessExecutablePath(processInfo);
+  if (executablePath) {
+    try {
+      if (isSameOrChildPath(normalizedRoot, executablePath)) {
+        return true;
+      }
+    } catch {
+      // Fall back to command-line text matching below.
+    }
+  }
+
+  const rootText = path.resolve(normalizedRoot).toLowerCase();
+  return Boolean(rootText && (processInfo.commandLine ?? "").toLowerCase().includes(rootText));
+}
+
+function serverProcessMatchesProfile(
+  processInfo: ServerProcess,
+  profile: AppConfig["profiles"][number],
+  options: { includeServerRoot: boolean },
+) {
+  if (launchHintsMatchProfile(parseLaunchHints(processInfo), profile)) {
+    return true;
+  }
+
+  return options.includeServerRoot && processRunsUnderServerRoot(processInfo, getProfileServerInstallRoot(profile));
+}
+
+export function serverProcessMatchesProfiles(
+  processInfo: ServerProcess,
+  profiles: AppConfig["profiles"],
+  options: { includeServerRoot?: boolean } = {},
+) {
+  const includeServerRoot = options.includeServerRoot ?? false;
+  return profiles.some((profile) => serverProcessMatchesProfile(processInfo, profile, { includeServerRoot }));
+}
+
 function findLaunchConflict(runningProcesses: ServerProcess[], profile: AppConfig["profiles"][number]): LaunchConflict | null {
   const processHints = runningProcesses.map(parseLaunchHints);
 
-  const identifierConflict = processHints.find(
-    (entry) => entry.identifier && entry.identifier.toLowerCase() === profile.launch.identifier.toLowerCase(),
-  );
+  const identifierConflict = processHints.find((entry) => entry.identifier && launchHintsMatchProfile({ ...entry, gamePort: null, queryPort: null }, profile));
   if (identifierConflict) {
     return {
       processId: identifierConflict.processId,
@@ -2016,6 +2084,7 @@ $processes = Get-CimInstance Win32_Process |
   Select-Object @{Name='pid';Expression={$_.ProcessId}},
                 @{Name='name';Expression={$_.Name}},
                 @{Name='commandLine';Expression={$_.CommandLine}},
+                @{Name='executablePath';Expression={$_.ExecutablePath}},
                 @{Name='startedAt';Expression={ if ($_.CreationDate) { [Management.ManagementDateTimeConverter]::ToDateTime($_.CreationDate).ToString('o') } else { $null } }},
                 @{Name='memoryMb';Expression={ [math]::Round(($_.WorkingSetSize / 1MB), 1) }}
 if (-not $processes) { '[]' } else { $processes | ConvertTo-Json -Compress }
@@ -2693,58 +2762,128 @@ export async function startAllServers(profiles: AppConfig["profiles"], activeMod
   return result;
 }
 
-export async function stopServer(pid?: number, force = false) {
-  const waitForTargetExit = async (targetPids: number[], timeoutMs = 8_000) => {
-    const deadline = Date.now() + timeoutMs;
+async function waitForTargetExit(targetPids: number[], timeoutMs = 8_000) {
+  const targetPidSet = new Set(targetPids);
+  const deadline = Date.now() + timeoutMs;
 
-    while (Date.now() < deadline) {
-      const runningProcesses = await listServerProcesses().catch(() => []);
-      const hasTargets = runningProcesses.some((processInfo) => targetPids.includes(processInfo.pid));
-      if (!hasTargets) {
-        return true;
-      }
-
-      await new Promise((resolve) => {
-        setTimeout(resolve, 500);
-      });
+  while (Date.now() < deadline) {
+    const runningProcesses = await listServerProcesses().catch(() => []);
+    const hasTargets = runningProcesses.some((processInfo) => targetPidSet.has(processInfo.pid));
+    if (!hasTargets) {
+      return true;
     }
 
-    return false;
-  };
+    await new Promise((resolve) => {
+      setTimeout(resolve, 500);
+    });
+  }
 
-  const terminateTargetPids = async (targetPids: number[], forceKill: boolean) => {
-    if (!targetPids.length) {
-      return;
-    }
+  return false;
+}
 
-    await Promise.all(
-      targetPids.map(async (targetPid) => {
-        try {
-          await execFileAsync(
-            "taskkill.exe",
-            ["/PID", String(targetPid), "/T", ...(forceKill ? ["/F"] : [])],
-            {
-              windowsHide: true,
-              maxBuffer: 1024 * 1024,
-            },
-          );
-        } catch {
-          // Ignore taskkill failures here and verify the process list after.
-        }
-      }),
+async function waitForNoMatchingServerProcesses(profiles: AppConfig["profiles"], timeoutMs = 8_000) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const runningProcesses = await listServerProcesses().catch(() => []);
+    const remaining = runningProcesses.filter((processInfo) =>
+      serverProcessMatchesProfiles(processInfo, profiles, { includeServerRoot: true }),
     );
-  };
-
-  if (pid) {
-    await terminateTargetPids([pid], force);
-    const stopped = await waitForTargetExit([pid], force ? 4_000 : 8_000);
-
-    if (!stopped && !force) {
-      await terminateTargetPids([pid], true);
-      await waitForTargetExit([pid], 6_000);
+    if (!remaining.length) {
+      return [] as ServerProcess[];
     }
 
-    await releaseHeldSteamRuntimeIfIdle().catch(() => undefined);
+    await new Promise((resolve) => {
+      setTimeout(resolve, 500);
+    });
+  }
+
+  const runningProcesses = await listServerProcesses().catch(() => []);
+  return runningProcesses.filter((processInfo) => serverProcessMatchesProfiles(processInfo, profiles, { includeServerRoot: true }));
+}
+
+async function terminateTargetPids(targetPids: number[], forceKill: boolean) {
+  if (!targetPids.length) {
+    return;
+  }
+
+  await Promise.all(
+    targetPids.map(async (targetPid) => {
+      try {
+        await execFileAsync(
+          "taskkill.exe",
+          ["/PID", String(targetPid), "/T", ...(forceKill ? ["/F"] : [])],
+          {
+            windowsHide: true,
+            maxBuffer: 1024 * 1024,
+          },
+        );
+      } catch {
+        // Ignore taskkill failures here and verify the process list after.
+      }
+    }),
+  );
+}
+
+export async function stopServerPids(targetPids: number[], force = false) {
+  const uniqueTargetPids = [...new Set(targetPids)].filter((targetPid) => Number.isFinite(targetPid));
+  if (!uniqueTargetPids.length) {
+    return;
+  }
+
+  await terminateTargetPids(uniqueTargetPids, force);
+  const stopped = await waitForTargetExit(uniqueTargetPids, force ? 4_000 : 8_000);
+
+  if (!stopped && !force) {
+    const remainingProcesses = await listServerProcesses().catch(() => []);
+    const remainingTargetPids = remainingProcesses
+      .filter((processInfo) => uniqueTargetPids.includes(processInfo.pid))
+      .map((processInfo) => processInfo.pid);
+
+    await terminateTargetPids(remainingTargetPids, true);
+    await waitForTargetExit(remainingTargetPids, 6_000);
+  }
+
+  await releaseHeldSteamRuntimeIfIdle().catch(() => undefined);
+}
+
+export async function stopConfiguredServerProcesses(profiles: AppConfig["profiles"]) {
+  const uniqueProfiles = [...new Map(profiles.map((profile) => [profile.id, profile])).values()];
+  if (!uniqueProfiles.length) {
+    return {
+      stoppedPids: [] as number[],
+      remainingPids: [] as number[],
+    };
+  }
+
+  const runningProcesses = await listServerProcesses();
+  const targetProcesses = runningProcesses.filter((processInfo) =>
+    serverProcessMatchesProfiles(processInfo, uniqueProfiles, { includeServerRoot: true }),
+  );
+  const targetPids = targetProcesses.map((processInfo) => processInfo.pid);
+
+  if (targetPids.length) {
+    await stopServerPids(targetPids, false);
+  }
+
+  let remainingProcesses = await waitForNoMatchingServerProcesses(uniqueProfiles, 5_000);
+  if (remainingProcesses.length) {
+    await stopServerPids(
+      remainingProcesses.map((processInfo) => processInfo.pid),
+      true,
+    );
+    remainingProcesses = await waitForNoMatchingServerProcesses(uniqueProfiles, 4_000);
+  }
+
+  return {
+    stoppedPids: [...new Set(targetPids)],
+    remainingPids: [...new Set(remainingProcesses.map((processInfo) => processInfo.pid))],
+  };
+}
+
+export async function stopServer(pid?: number, force = false) {
+  if (pid) {
+    await stopServerPids([pid], force);
     return;
   }
 
@@ -2754,20 +2893,7 @@ export async function stopServer(pid?: number, force = false) {
   }
 
   const targetPids = processes.map((processInfo) => processInfo.pid);
-  await terminateTargetPids(targetPids, force);
-  const stopped = await waitForTargetExit(targetPids, force ? 4_000 : 8_000);
-
-  if (!stopped && !force) {
-    const remainingProcesses = await listServerProcesses().catch(() => []);
-    const remainingTargetPids = remainingProcesses
-      .filter((processInfo) => targetPids.includes(processInfo.pid))
-      .map((processInfo) => processInfo.pid);
-
-    await terminateTargetPids(remainingTargetPids, true);
-    await waitForTargetExit(remainingTargetPids, 6_000);
-  }
-
-  await releaseHeldSteamRuntimeIfIdle().catch(() => undefined);
+  await stopServerPids(targetPids, force);
 }
 
 function buildHealth(config: AppConfig, runningProcesses: ServerProcess[], logFiles: LogFileSummary[], adminPresent: boolean, backupCount: number) {

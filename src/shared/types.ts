@@ -505,6 +505,7 @@ export type ServerProcess = {
   pid: number;
   name: string;
   commandLine: string;
+  executablePath: string | null;
   startedAt: string | null;
   memoryMb: number;
 };
