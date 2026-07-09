@@ -549,20 +549,101 @@ async function tryClickMyRealmSteamSignIn(client: CdpClient) {
       element.innerText,
       element.textContent,
       element.value,
+      element.id,
+      element.name,
       element.getAttribute("aria-label"),
       element.getAttribute("title"),
+      element.getAttribute("alt"),
       element.getAttribute("href")
     ].filter(Boolean).join(" ").toLowerCase();
-    const candidates = Array.from(document.querySelectorAll("a,button,input[type='button'],input[type='submit']"));
+    const candidates = Array.from(document.querySelectorAll("a,button,input[type='button'],input[type='submit'],input[type='image']"));
     const login = candidates.find((element) => {
       const label = labelFor(element);
-      return label.includes("sign in") || label.includes("login") || label.includes("steam");
+      return label.includes("sign in") || label.includes("login") || label.includes("steam") || label.includes("imagelogin");
     });
     if (!login) {
       return false;
     }
     login.click();
     return true;
+  })()`);
+}
+
+async function tryApproveSteamOpenId(client: CdpClient) {
+  return client.evaluate<{ clicked: boolean; reason: string }>(`(() => {
+    const currentUrl = window.location.href.toLowerCase();
+    const bodyText = (document.body?.innerText || "").toLowerCase();
+    const isSteamOpenId =
+      currentUrl.includes("steamcommunity.com/openid/login") ||
+      (currentUrl.includes("steamcommunity.com") && bodyText.includes("sign into myrealm.lastoasis.gg"));
+    if (!isSteamOpenId) {
+      return { clicked: false, reason: "Not on the Steam OpenID approval page." };
+    }
+
+    const hasPasswordField = Boolean(document.querySelector("input[type='password'], input[name='password'], input#input_password"));
+    if (hasPasswordField) {
+      return { clicked: false, reason: "Steam is showing the password login form." };
+    }
+
+    const isVisible = (element) => {
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+    };
+    const labelFor = (element) => [
+      element.innerText,
+      element.textContent,
+      element.value,
+      element.id,
+      element.name,
+      element.getAttribute("aria-label"),
+      element.getAttribute("title"),
+      element.getAttribute("alt"),
+      element.getAttribute("src"),
+      element.getAttribute("href")
+    ].filter(Boolean).join(" ").toLowerCase();
+
+    const candidates = Array.from(document.querySelectorAll(
+      "#imageLogin, .btn_green_white_innerfade, button, input[type='submit'], input[type='button'], input[type='image'], a, [role='button']"
+    ));
+    const approval = candidates.find((element) => {
+      if (!isVisible(element)) {
+        return false;
+      }
+      const label = labelFor(element);
+      if (label.includes("not you") || label.includes("cancel") || label.includes("sign out")) {
+        return false;
+      }
+      return (
+        label.includes("sign in") ||
+        label.includes("signin") ||
+        label.includes("continue") ||
+        label.includes("approve") ||
+        label.includes("authorize") ||
+        label.includes("imagelogin") ||
+        element.id === "imageLogin"
+      );
+    });
+
+    if (approval) {
+      approval.click();
+      return { clicked: true, reason: "Clicked the Steam OpenID approval button." };
+    }
+
+    const form = Array.from(document.forms).find((entry) => {
+      const action = (entry.getAttribute("action") || "").toLowerCase();
+      return action.includes("/openid/login") || currentUrl.includes("/openid/login");
+    });
+    if (form) {
+      if (typeof form.requestSubmit === "function") {
+        form.requestSubmit();
+      } else {
+        form.submit();
+      }
+      return { clicked: true, reason: "Submitted the Steam OpenID approval form." };
+    }
+
+    return { clicked: false, reason: "Steam OpenID approval button was not found." };
   })()`);
 }
 
@@ -657,9 +738,20 @@ async function autoLoginMyRealm(client: CdpClient, target: DevToolsTarget, flow:
     }
 
     if (currentUrl.includes("steamcommunity.com") || currentUrl.includes("store.steampowered.com")) {
+      const approval = await tryApproveSteamOpenId(client).catch(() => ({ clicked: false, reason: "" }));
+      if (approval.clicked) {
+        const approvedCookies = await waitForMyRealmCookie(client, target, flow, 20000);
+        if (hasAuthenticatedMyRealmCookie(approvedCookies)) {
+          return approvedCookies;
+        }
+        await delay(1500);
+        continue;
+      }
+
       const result = await fillSteamLoginForm(client, credentials.accountName, credentials.password);
       if (!result.submitted) {
-        const clicked = await tryClickMyRealmSteamSignIn(client).catch(() => false);
+        const approved = await tryApproveSteamOpenId(client).catch(() => ({ clicked: false, reason: "" }));
+        const clicked = approved.clicked || (await tryClickMyRealmSteamSignIn(client).catch(() => false));
         if (!clicked) {
           throw new Error(result.reason || "Steam login form could not be submitted.");
         }
