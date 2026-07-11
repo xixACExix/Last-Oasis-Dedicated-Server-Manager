@@ -15,6 +15,7 @@ import {
   listServerProcesses,
   readMods,
   serverProcessMatchesProfiles,
+  startAllServers,
   startServer,
   stopConfiguredServerProcesses,
   syncMods,
@@ -1596,23 +1597,21 @@ async function runPendingMaintenanceTargets(config: AppConfig, profiles: AppConf
 
     if (pendingActionSnapshot === "restart") {
       markDesiredProfiles(effectiveProfiles.map((profile) => profile.id));
-      const restartedLabels: string[] = [];
-      const failedRestarts: string[] = [];
-
-      for (let index = 0; index < effectiveProfiles.length; index += 1) {
-        const profile = effectiveProfiles[index];
-        const profileLabel = profileLabels[index] ?? (profile.launch.identifier || profile.name);
-
-        try {
-          await startServer(profile, {
-            activeModIds: latestConfig.operationsSettings.modIds,
-          });
-          restartedLabels.push(profileLabel);
-        } catch (error) {
-          const failureMessage = error instanceof Error ? error.message : "Unknown launch error.";
-          failedRestarts.push(`${profileLabel}: ${failureMessage}`);
-        }
-      }
+      const labelByProfileId = new Map(
+        effectiveProfiles.map((profile, index) => [profile.id, profileLabels[index] ?? (profile.launch.identifier || profile.name)]),
+      );
+      const restartResult = await startAllServers(effectiveProfiles, latestConfig.operationsSettings.modIds);
+      const restartedLabels = restartResult.started.map(
+        (started) => labelByProfileId.get(started.profileId) ?? started.profileName,
+      );
+      const failedRestarts = [
+        ...restartResult.failed.map(
+          (failure) => `${labelByProfileId.get(failure.profileId) ?? failure.profileName}: ${failure.reason}`,
+        ),
+        ...restartResult.skipped.map(
+          (skipped) => `${labelByProfileId.get(skipped.profileId) ?? skipped.profileName}: ${skipped.reason}`,
+        ),
+      ];
 
       if (!failedRestarts.length) {
         lastAction = `Restarted ${formatProfileLabelSummary(profileLabels)} at ${new Date().toLocaleString()}.`;

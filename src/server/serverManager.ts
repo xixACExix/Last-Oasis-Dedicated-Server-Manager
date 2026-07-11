@@ -99,6 +99,18 @@ let dedicatedTileSnapshotCache: {
   value: DedicatedServerTileSnapshot[];
 } | null = null;
 
+const LAUNCH_RESERVATION_TTL_MS = 2 * 60 * 1000;
+const LAUNCH_RESERVATION_COOLDOWN_MS = 30 * 1000;
+
+const launchReservations = new Map<
+  string,
+  {
+    token: symbol;
+    profileName: string;
+    expiresAt: number;
+  }
+>();
+
 let modsCache: {
   key: string;
   expiresAt: number;
@@ -107,6 +119,12 @@ let modsCache: {
 
 function escapePowerShell(input: string) {
   return input.replace(/'/g, "''");
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function isPrivateIpv4(address: string) {
@@ -693,6 +711,82 @@ function findLaunchConflict(runningProcesses: ServerProcess[], profile: AppConfi
   }
 
   return null;
+}
+
+function getLaunchReservationKey(profile: AppConfig["profiles"][number]) {
+  return (profile.launch.identifier || profile.id || profile.name).trim().toLowerCase();
+}
+
+function pruneExpiredLaunchReservations(now = Date.now()) {
+  for (const [key, reservation] of launchReservations.entries()) {
+    if (reservation.expiresAt <= now) {
+      launchReservations.delete(key);
+    }
+  }
+}
+
+function acquireLaunchReservation(profile: AppConfig["profiles"][number]) {
+  const now = Date.now();
+  pruneExpiredLaunchReservations(now);
+
+  const key = getLaunchReservationKey(profile);
+  const existing = launchReservations.get(key);
+  if (existing) {
+    const secondsLeft = Math.max(1, Math.ceil((existing.expiresAt - now) / 1000));
+    throw new Error(
+      `Launch for ${profile.launch.identifier || profile.name} is already in progress from ${existing.profileName}. Try again in ${secondsLeft}s if it did not start.`,
+    );
+  }
+
+  const token = Symbol(key);
+  launchReservations.set(key, {
+    token,
+    profileName: profile.name,
+    expiresAt: now + LAUNCH_RESERVATION_TTL_MS,
+  });
+
+  return {
+    release: (cooldownMs = 0) => {
+      const current = launchReservations.get(key);
+      if (!current || current.token !== token) {
+        return;
+      }
+
+      if (cooldownMs > 0) {
+        current.expiresAt = Date.now() + cooldownMs;
+        launchReservations.set(key, current);
+        return;
+      }
+
+      launchReservations.delete(key);
+    },
+  };
+}
+
+function clearLaunchReservationsForProfiles(profiles: AppConfig["profiles"]) {
+  for (const profile of profiles) {
+    launchReservations.delete(getLaunchReservationKey(profile));
+  }
+}
+
+async function findLaunchConflictWithRetry(profile: AppConfig["profiles"][number], attempts = 3, delayMs = 300) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const runningProcesses = await listServerProcesses();
+    const launchConflict = findLaunchConflict(runningProcesses, profile);
+    if (launchConflict) {
+      return launchConflict;
+    }
+
+    if (attempt < attempts - 1) {
+      await sleep(delayMs);
+    }
+  }
+
+  return null;
+}
+
+function findMatchingProfileProcesses(runningProcesses: ServerProcess[], profile: AppConfig["profiles"][number]) {
+  return runningProcesses.filter((processInfo) => launchHintsMatchProfile(parseLaunchHints(processInfo), profile));
 }
 
 function readNullTerminatedString(buffer: Buffer, offset: number) {
@@ -2591,71 +2685,86 @@ export async function startServer(
     resolvedLaunch?: Awaited<ReturnType<typeof resolveLaunchExecutable>>;
   },
 ) {
-  const existingProcesses = await listServerProcesses();
-  const launchConflict = findLaunchConflict(existingProcesses, profile);
-  if (launchConflict) {
-    throw new Error(launchConflict.reason);
-  }
+  const launchReservation = acquireLaunchReservation(profile);
+  let launchedPid: number | null = null;
 
-  const resolvedLaunch = options?.resolvedLaunch ?? (await resolveLaunchExecutable(profile));
+  try {
+    const launchConflict = await findLaunchConflictWithRetry(profile);
+    if (launchConflict) {
+      throw new Error(launchConflict.reason);
+    }
 
-  if (!(await pathExists(resolvedLaunch.executablePath))) {
-    throw new Error(`Executable not found: ${resolvedLaunch.executablePath}`);
-  }
+    const resolvedLaunch = options?.resolvedLaunch ?? (await resolveLaunchExecutable(profile));
 
-  if (!(await pathExists(resolvedLaunch.workingDirectory))) {
-    throw new Error(`Working directory not found: ${resolvedLaunch.workingDirectory}`);
-  }
+    if (!(await pathExists(resolvedLaunch.executablePath))) {
+      throw new Error(`Executable not found: ${resolvedLaunch.executablePath}`);
+    }
 
-  if (profile.validationIssues.length) {
-    throw new Error(`Profile is incomplete: ${profile.validationIssues.join(" ")}`);
-  }
+    if (!(await pathExists(resolvedLaunch.workingDirectory))) {
+      throw new Error(`Working directory not found: ${resolvedLaunch.workingDirectory}`);
+    }
 
-  const sanitizedTitles = [
-    ...new Set([
-      ...(await sanitizeModCopiesUnderRoot(getProfileServerModsPath(profile), options?.activeModIds ?? [])),
-      ...(await sanitizeDedicatedServerModCopies(resolvedLaunch.workingDirectory, options?.activeModIds ?? [])),
-    ]),
-  ];
-  const modActivationResult = await synchronizeServerModsForLaunch(
-    getProfileServerModsPath(profile),
-    options?.activeModIds ?? [],
-  );
-  const modRepairResult = await repairSavedModReferences(getProfileServerInstallRoot(profile));
+    if (profile.validationIssues.length) {
+      throw new Error(`Profile is incomplete: ${profile.validationIssues.join(" ")}`);
+    }
 
-  const normalizedLaunchSettings = {
-    ...profile.launch,
-    steamDedicatedServerAppId: LAST_OASIS_BASE_APP_ID,
-    forceSteamClientLink: false,
-    noLiveServer: true,
-  };
-  const generatedArguments = buildLastOasisArguments(normalizedLaunchSettings);
-  const script = `
+    const sanitizedTitles = [
+      ...new Set([
+        ...(await sanitizeModCopiesUnderRoot(getProfileServerModsPath(profile), options?.activeModIds ?? [])),
+        ...(await sanitizeDedicatedServerModCopies(resolvedLaunch.workingDirectory, options?.activeModIds ?? [])),
+      ]),
+    ];
+    const modActivationResult = await synchronizeServerModsForLaunch(
+      getProfileServerModsPath(profile),
+      options?.activeModIds ?? [],
+    );
+    const modRepairResult = await repairSavedModReferences(getProfileServerInstallRoot(profile));
+
+    const normalizedLaunchSettings = {
+      ...profile.launch,
+      steamDedicatedServerAppId: LAST_OASIS_BASE_APP_ID,
+      forceSteamClientLink: false,
+      noLiveServer: true,
+    };
+    const generatedArguments = buildLastOasisArguments(normalizedLaunchSettings);
+    const script = `
 $workingDirectory = '${escapePowerShell(resolvedLaunch.workingDirectory)}'
 $process = Start-Process -FilePath '${escapePowerShell(resolvedLaunch.executablePath)}' -WorkingDirectory $workingDirectory -ArgumentList '${escapePowerShell(generatedArguments)}' -PassThru
 $process.Id
 `.trim();
 
-  const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-Command", script], {
-    windowsHide: true,
-    maxBuffer: 1024 * 1024,
-  });
-  try {
+    const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-Command", script], {
+      windowsHide: true,
+      maxBuffer: 1024 * 1024,
+    });
+
     const pid = Number.parseInt(stdout.trim(), 10);
     if (!Number.isFinite(pid)) {
       throw new Error("The server process started but no PID was returned.");
     }
+    launchedPid = pid;
 
     const verificationDelayMs = Math.max(150, options?.verificationDelayMs ?? 800);
-    await new Promise((resolve) => {
-      setTimeout(resolve, verificationDelayMs);
-    });
+    await sleep(verificationDelayMs);
 
     const runningProcesses = await listServerProcesses();
     const matchingProcess = runningProcesses.find((processInfo) => processInfo.pid === pid);
 
     if (!matchingProcess) {
       throw new Error("The start command returned a PID, but no Last Oasis server process stayed alive.");
+    }
+
+    const matchingProfileProcesses = findMatchingProfileProcesses(runningProcesses, profile);
+    if (matchingProfileProcesses.length > 1 && matchingProfileProcesses.some((processInfo) => processInfo.pid === pid)) {
+      await stopServerPids([pid], true);
+      launchedPid = null;
+      const duplicatePids = matchingProfileProcesses
+        .map((processInfo) => processInfo.pid)
+        .filter((processId) => processId !== pid)
+        .join(", ");
+      throw new Error(
+        `Duplicate launch blocked for ${profile.launch.identifier || profile.name}. PID ${pid} was stopped because PID(s) ${duplicatePids} already matched this profile.`,
+      );
     }
 
     return {
@@ -2678,8 +2787,8 @@ $process.Id
         .filter(Boolean)
         .join(" "),
     };
-  } catch (error) {
-    throw error;
+  } finally {
+    launchReservation.release(launchedPid === null ? 0 : LAUNCH_RESERVATION_COOLDOWN_MS);
   }
 }
 
@@ -2855,6 +2964,8 @@ export async function stopConfiguredServerProcesses(profiles: AppConfig["profile
       remainingPids: [] as number[],
     };
   }
+
+  clearLaunchReservationsForProfiles(uniqueProfiles);
 
   const runningProcesses = await listServerProcesses();
   const targetProcesses = runningProcesses.filter((processInfo) =>
